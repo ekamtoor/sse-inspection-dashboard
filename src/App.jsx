@@ -119,7 +119,36 @@ function AppShell({ user }) {
     toast("Site added.");
   };
   const updateSite = (siteData) => {
-    setSites((prev) => (prev || []).map((s) => (s.id === siteData.id ? { ...s, ...siteData } : s)));
+    const originalId = editingSite?.id ?? siteData.id;
+    const newId = (siteData.id || "").trim() || originalId;
+
+    if (newId !== originalId && (sites || []).some((s) => s.id === newId)) {
+      toast(`Site ID "${newId}" is already in use.`);
+      return;
+    }
+
+    const finalData = { ...siteData, id: newId };
+    setSites((prev) =>
+      (prev || []).map((s) => (s.id === originalId ? { ...s, ...finalData } : s))
+    );
+
+    if (newId !== originalId) {
+      const remap = (rows) =>
+        (rows || []).map((r) => (r.siteId === originalId ? { ...r, siteId: newId } : r));
+      setScheduled(remap);
+      setIssues(remap);
+      setCompleted(remap);
+      setCorporate(remap);
+      setInternalAudits(remap);
+      if (activeInspection?.siteId === originalId) {
+        setActiveInspection({ ...activeInspection, siteId: newId });
+      }
+      if (activeInternal?.siteId === originalId) {
+        setActiveInternal({ ...activeInternal, siteId: newId });
+      }
+      if (siteDetailId === originalId) setSiteDetailId(newId);
+    }
+
     setShowSiteForm(false);
     setEditingSite(null);
     toast("Site updated.");
