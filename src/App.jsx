@@ -349,6 +349,10 @@ function AppShell({ user }) {
     toast("Inspection scheduled.");
     return entry;
   };
+  const updateScheduled = (entry) => {
+    setScheduled((prev) => (prev || []).map((s) => (s.id === entry.id ? { ...s, ...entry } : s)));
+    toast("Schedule updated.");
+  };
   const deleteScheduled = (id) => {
     setScheduled((prev) => (prev || []).filter((s) => s.id !== id));
     toast("Schedule removed.");
@@ -503,7 +507,9 @@ function AppShell({ user }) {
             <ScheduleView
               sites={sitesEnriched}
               scheduled={scheduled || []}
+              inspectors={inspectors || []}
               addScheduled={addScheduled}
+              updateScheduled={updateScheduled}
               startInspection={startInspection}
               startInternal={startInternal}
               onDelete={deleteScheduled}

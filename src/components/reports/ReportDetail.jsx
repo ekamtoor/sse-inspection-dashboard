@@ -165,40 +165,109 @@ export default function ReportDetail({ report, sites, onBack }) {
 
       <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
         <div className="px-4 md:px-6 py-3 md:py-4 border-b border-stone-200">
-          <h3 className="font-display text-lg font-semibold">Action Items</h3>
-          <p className="text-xs text-stone-500 mt-0.5">{report.fails.length} flag{report.fails.length === 1 ? "" : "s"} from this walk</p>
+          <h3 className="font-display text-lg font-semibold">Full Inspection</h3>
+          <p className="text-xs text-stone-500 mt-0.5">
+            {report.fails.length} flag{report.fails.length === 1 ? "" : "s"} · every item listed below
+          </p>
         </div>
-        <div className="divide-y divide-stone-100">
-          {report.fails.length === 0 && (
-            <div className="px-6 py-12 text-center text-sm text-stone-500">All clear. No flags.</div>
-          )}
-          {report.fails.map((f) => {
-            const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
-            const photos = report.photos?.[f.id] || [];
+        <div>
+          {SCHEMA.map((sec) => {
+            const items = sec.items;
+            if (!items || items.length === 0) return null;
+            const earned = items.reduce((a, it) => a + (report.answers[it.id] === "pass" ? it.pts : 0), 0);
+            const total = items.reduce((a, it) => a + it.pts, 0);
+            const failsInSec = items.filter((it) => report.answers[it.id] === "fail").length;
+            const failsList = report.fails.filter((f) => items.some((i) => i.id === f.id));
             return (
-              <div key={f.id} className="px-4 md:px-6 py-3 md:py-4">
-                <div className="flex items-start gap-3 md:gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500">{f.id}</span>
-                      <span className="text-[10px] uppercase tracking-wider text-stone-500">·</span>
-                      <span className="text-[10px] uppercase tracking-wider text-stone-500 truncate">{sec?.label}</span>
-                    </div>
-                    <div className="text-sm font-medium mt-1">{f.q}</div>
-                    {f.comment && (
-                      <p className="text-sm text-stone-600 mt-2 italic font-display">{f.comment}</p>
+              <div key={sec.id} className="border-t border-stone-100 first:border-t-0">
+                <div
+                  className={`px-4 md:px-6 py-2.5 flex items-center gap-3 ${
+                    sec.zeroTolerance ? "bg-red-50" : "bg-stone-50"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    {sec.zeroTolerance && <ShieldAlert className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />}
+                    <span className={`font-display font-semibold text-sm md:text-base ${sec.zeroTolerance ? "text-red-900" : "text-stone-900"}`}>
+                      {sec.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs flex-shrink-0">
+                    {failsInSec > 0 && (
+                      <span className="text-red-600 font-medium">
+                        {failsInSec} flag{failsInSec > 1 ? "s" : ""}
+                      </span>
                     )}
-                    {photos.length > 0 && (
-                      <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        {photos.map((p, i) => (
-                          <div key={i} className="w-14 h-14 rounded-md bg-stone-100 border border-stone-200 overflow-hidden">
-                            <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
-                          </div>
-                        ))}
-                      </div>
+                    {total > 0 && (
+                      <span className="font-mono text-stone-600">
+                        {earned}<span className="text-stone-400">/{total}</span>
+                      </span>
                     )}
                   </div>
-                  <PriorityPill priority={f.severity} />
+                </div>
+
+                <div className="divide-y divide-stone-100">
+                  {items.map((it) => {
+                    const ans = report.answers[it.id];
+                    const note = report.comments?.[it.id];
+                    const photos = report.photos?.[it.id] || [];
+                    const failMatch = failsList.find((f) => f.id === it.id);
+                    return (
+                      <div key={it.id} className="px-4 md:px-6 py-3 md:py-3.5">
+                        <div className="flex items-start gap-3">
+                          <span className="font-mono text-[10px] md:text-[11px] uppercase tracking-wider text-stone-500 pt-0.5 w-10 md:w-12 flex-shrink-0">
+                            {it.id}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-2">
+                              <p className="flex-1 text-sm text-stone-800 leading-relaxed">{it.q}</p>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {failMatch && <PriorityPill priority={failMatch.severity} />}
+                                {ans === "pass" && (
+                                  <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">
+                                    Pass
+                                  </span>
+                                )}
+                                {ans === "fail" && (
+                                  <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-red-600 text-white rounded font-bold">
+                                    Fail
+                                  </span>
+                                )}
+                                {!ans && (
+                                  <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-stone-100 text-stone-500 rounded">
+                                    —
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {note && (
+                              <p className="text-sm text-stone-600 mt-1.5 italic font-display">{note}</p>
+                            )}
+                            {photos.length > 0 && (
+                              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                {photos.map((p, i) => (
+                                  <a
+                                    key={p.path || p.url || i}
+                                    href={p.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-16 h-16 md:w-20 md:h-20 rounded-md bg-stone-100 border border-stone-200 overflow-hidden hover:border-stone-400 transition-colors"
+                                    title="Open full size"
+                                  >
+                                    <img
+                                      src={p.url}
+                                      alt={p.name}
+                                      className="w-full h-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
