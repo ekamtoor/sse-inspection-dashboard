@@ -79,7 +79,7 @@ export default function CorporateView({ corporate, sites, completed, detail, set
               {onDelete && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(c); }}
-                  className="absolute top-3 right-3 p-2 rounded-md text-stone-400 hover:text-red-600 hover:bg-red-50 z-10"
+                  className="absolute bottom-3 right-3 p-2 rounded-md text-stone-400 hover:text-red-600 hover:bg-red-50 z-10"
                   title="Delete report"
                 >
                   <Trash2 className="w-4 h-4" />
