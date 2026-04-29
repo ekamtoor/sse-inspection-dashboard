@@ -120,13 +120,13 @@ export default function LoginScreen() {
                 Check your email
               </h2>
               <p className="text-sm text-stone-600 leading-relaxed text-center mb-5">
-                We sent a 6-digit code to{" "}
+                We sent a sign-in code to{" "}
                 <span className="font-medium">{email}</span>. Enter it below — or just tap the link
                 in the email if it opens in this browser.
               </p>
               <label className="block">
                 <span className="text-xs font-medium text-stone-600 uppercase tracking-wide">
-                  6-digit code
+                  Sign-in code
                 </span>
                 <input
                   type="text"
@@ -135,11 +135,11 @@ export default function LoginScreen() {
                   autoComplete="one-time-code"
                   required
                   autoFocus
-                  maxLength={6}
+                  maxLength={8}
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="123456"
-                  className="mt-1 w-full border border-stone-300 rounded-md px-3 py-2 text-center text-lg tracking-[0.4em] font-mono focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400"
+                  placeholder="12345678"
+                  className="mt-1 w-full border border-stone-300 rounded-md px-3 py-2 text-center text-lg tracking-[0.3em] font-mono focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400"
                 />
               </label>
 
@@ -151,7 +151,7 @@ export default function LoginScreen() {
 
               <button
                 type="submit"
-                disabled={status === "verifying" || code.length < 6}
+                disabled={status === "verifying" || code.length < 6 || code.length > 8}
                 className="mt-5 w-full bg-stone-900 hover:bg-stone-800 disabled:bg-stone-300 text-white text-sm font-medium px-4 py-2.5 rounded-md flex items-center justify-center gap-2"
               >
                 {status === "verifying" ? (
