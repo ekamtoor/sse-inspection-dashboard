@@ -74,6 +74,15 @@ export default function Sidebar({ view, setView, activeInspection, activeInterna
             </button>
           )}
         </div>
+        <div className="mt-3 flex items-center justify-center gap-1.5 text-[10px] text-stone-500">
+          <img
+            src="/seven-star-logo.png"
+            alt=""
+            className="w-3.5 h-3.5 object-contain opacity-70"
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
+          />
+          <span className="italic font-display">by Seven Star Energy</span>
+        </div>
       </div>
     </aside>
   );

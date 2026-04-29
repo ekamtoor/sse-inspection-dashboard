@@ -78,8 +78,32 @@ async function preloadPhotos(report) {
   return out;
 }
 
+// Best-effort load of the Seven Star Energy logo for the PDF footer.
+// Encodes as PNG to preserve transparency. Returns null if the file isn't
+// present so the renderer falls back to plain text.
+async function loadBrandLogo() {
+  try {
+    const img = await loadImage("/seven-star-logo.png");
+    const maxPx = 200;
+    const longSide = Math.max(img.naturalWidth, img.naturalHeight);
+    const scale = longSide > maxPx ? maxPx / longSide : 1;
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    return { dataUrl: canvas.toDataURL("image/png"), w, h };
+  } catch {
+    return null;
+  }
+}
+
 export async function generateReportPDF({ report, site }) {
-  const photoCache = await preloadPhotos(report);
+  const [photoCache, brandLogo] = await Promise.all([
+    preloadPhotos(report),
+    loadBrandLogo(),
+  ]);
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   let y = M;
@@ -378,18 +402,38 @@ export async function generateReportPDF({ report, site }) {
 
   // ---- Footer page numbers ----
   const pageCount = pdf.getNumberOfPages();
+  const footerY = PAGE_H - 6;
+  const logoSize = 4.5;
   for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
+    let footerLeftX = M;
+    if (brandLogo?.dataUrl) {
+      try {
+        const aspect = brandLogo.w / brandLogo.h;
+        const lw = aspect >= 1 ? logoSize : logoSize * aspect;
+        const lh = aspect >= 1 ? logoSize / aspect : logoSize;
+        pdf.addImage(
+          brandLogo.dataUrl,
+          "PNG",
+          footerLeftX,
+          footerY - lh + 0.6,
+          lw,
+          lh,
+          undefined,
+          "FAST"
+        );
+        footerLeftX += lw + 1.5;
+      } catch {
+        // ignore logo embed failures
+      }
+    }
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     setText(pdf, COLOR.muted);
-    pdf.text(
-      `Vanguard · ${site?.name || ""} · ${dateStr}`,
-      M,
-      PAGE_H - 6
-    );
+    const leftText = `Vanguard · by Seven Star Energy · ${site?.name || ""} · ${dateStr}`;
+    pdf.text(leftText, footerLeftX, footerY);
     const right = `Page ${i} of ${pageCount}`;
-    pdf.text(right, PAGE_W - M - pdf.getTextWidth(right), PAGE_H - 6);
+    pdf.text(right, PAGE_W - M - pdf.getTextWidth(right), footerY);
   }
 
   return pdf;

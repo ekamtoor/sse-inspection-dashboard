@@ -175,8 +175,17 @@ export default function LoginScreen() {
           )}
         </div>
 
-        <p className="text-[11px] text-stone-400 text-center mt-6 leading-relaxed">
-          Seven Star Energy LLC · Internal use only
+        <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-stone-400">
+          <img
+            src="/seven-star-logo.png"
+            alt=""
+            className="w-4 h-4 object-contain opacity-80"
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
+          />
+          <span className="italic font-display">by Seven Star Energy</span>
+        </div>
+        <p className="text-[11px] text-stone-400 text-center mt-2 leading-relaxed">
+          Internal use only
         </p>
       </div>
     </div>
