@@ -8,6 +8,7 @@ import StatusPill from "../shared/StatusPill.jsx";
 
 export default function Dashboard({
   setView, startInspection, startInternal, sites, scheduled, issues, completed, setIssueDetail,
+  activeInspection, activeInternal,
 }) {
   const avgScore = Math.round(sites.reduce((a, s) => a + s.lastScore, 0) / Math.max(sites.length, 1));
   const activeIssues = issues.filter((i) => i.status !== "resolved");
@@ -41,6 +42,9 @@ export default function Dashboard({
             {upcoming.map((s) => {
               const site = sites.find((x) => x.id === s.siteId);
               const dt = new Date(s.date + "T00:00:00");
+              const isResume = s.kind === "internal"
+                ? Boolean(activeInternal && activeInternal.siteId === s.siteId)
+                : Boolean(activeInspection && activeInspection.scheduleId === s.id);
               return (
                 <div key={s.id} className="px-4 md:px-6 py-3 md:py-4 flex items-center gap-3 md:gap-4 hover:bg-stone-50 group">
                   <div className="w-11 md:w-12 text-center flex-shrink-0">
@@ -50,7 +54,15 @@ export default function Dashboard({
                     <div className="font-display text-xl md:text-2xl font-semibold leading-tight">{dt.getDate()}</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{site?.name}</div>
+                    <div className="text-sm font-medium truncate flex items-center gap-2">
+                      <span className="truncate">{site?.name}</span>
+                      {isResume && (
+                        <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
+                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                          In progress
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5 mt-1 text-[11px] md:text-xs text-stone-500 flex-wrap">
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {s.time}</span>
                       <span>·</span><span className="truncate">{s.inspector}</span>
@@ -59,10 +71,22 @@ export default function Dashboard({
                     </div>
                   </div>
                   <button
-                    onClick={() => (s.kind === "internal" ? startInternal(s.siteId) : startInspection(s.siteId, s.id))}
-                    className="md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-stone-900 text-white text-xs font-medium px-3 py-1.5 rounded-md flex-shrink-0"
+                    onClick={() => {
+                      if (isResume) {
+                        setView(s.kind === "internal" ? "internal" : "inspection");
+                      } else if (s.kind === "internal") {
+                        startInternal(s.siteId);
+                      } else {
+                        startInspection(s.siteId, s.id);
+                      }
+                    }}
+                    className={
+                      isResume
+                        ? "transition-opacity bg-amber-500 hover:bg-amber-600 text-stone-900 text-xs font-semibold px-3 py-1.5 rounded-md flex-shrink-0"
+                        : "md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-stone-900 text-white text-xs font-medium px-3 py-1.5 rounded-md flex-shrink-0"
+                    }
                   >
-                    Start
+                    {isResume ? "Resume" : "Start"}
                   </button>
                 </div>
               );

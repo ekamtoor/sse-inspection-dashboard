@@ -129,6 +129,36 @@ function AppShell({ user }) {
   const startInspection = (siteId, scheduleId = null) => {
     const site = (sites || []).find((s) => s.id === siteId);
     if (!site) return;
+    if (
+      activeInspection &&
+      activeInspection.siteId === siteId &&
+      activeInspection.scheduleId === scheduleId
+    ) {
+      navigate("inspection");
+      return;
+    }
+    if (activeInspection) {
+      setConfirmDialog({
+        title: "Discard in-progress walkthrough?",
+        message:
+          "Another pre-inspection is already in progress. Starting a new one will discard the current answers and comments.",
+        confirmLabel: "Discard and start new",
+        onConfirm: () => {
+          setActiveInspection({
+            id: `INSP-${Date.now()}`,
+            siteId,
+            site,
+            scheduleId,
+            startedAt: new Date().toISOString(),
+            answers: {},
+            comments: {},
+            photos: {},
+          });
+          navigate("inspection");
+        },
+      });
+      return;
+    }
     setActiveInspection({
       id: `INSP-${Date.now()}`,
       siteId,
@@ -232,6 +262,31 @@ function AppShell({ user }) {
   const startInternal = (siteId) => {
     const site = (sites || []).find((s) => s.id === siteId);
     if (!site) return;
+    if (activeInternal && activeInternal.siteId === siteId) {
+      navigate("internal");
+      return;
+    }
+    if (activeInternal) {
+      setConfirmDialog({
+        title: "Discard in-progress ops walk?",
+        message:
+          "Another internal walkthrough is already in progress. Starting a new one will discard the current values and comments.",
+        confirmLabel: "Discard and start new",
+        onConfirm: () => {
+          setActiveInternal({
+            id: `OPS-${Date.now()}`,
+            siteId,
+            site,
+            startedAt: new Date().toISOString(),
+            values: {},
+            comments: {},
+            tobacco: [],
+          });
+          navigate("internal");
+        },
+      });
+      return;
+    }
     setActiveInternal({
       id: `OPS-${Date.now()}`,
       siteId,
@@ -337,6 +392,8 @@ function AppShell({ user }) {
               issues={issues || []}
               completed={completed || []}
               setIssueDetail={setIssueDetail}
+              activeInspection={activeInspection}
+              activeInternal={activeInternal}
             />
           )}
 
