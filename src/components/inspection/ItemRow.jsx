@@ -1,7 +1,10 @@
 import { useRef } from "react";
-import { CheckCircle2, XCircle, Camera, X } from "lucide-react";
+import { CheckCircle2, XCircle, Camera, X, Loader2 } from "lucide-react";
 
-export default function ItemRow({ item, answer, comment, photoList, setAnswer, setComment, setPhoto, removePhoto }) {
+export default function ItemRow({
+  item, answer, comment, photoList, uploadingCount,
+  setAnswer, setComment, setPhoto, removePhoto,
+}) {
   const fileRef = useRef();
   return (
     <div className="px-4 md:px-6 py-4 md:py-5">
@@ -41,7 +44,7 @@ export default function ItemRow({ item, answer, comment, photoList, setAnswer, s
             </button>
             {item.pts > 0 && <span className="ml-1 font-mono text-[10px] text-stone-400 flex-shrink-0">+{item.pts}</span>}
           </div>
-          {(answer || comment || (photoList && photoList.length > 0)) && (
+          {(answer || comment || (photoList && photoList.length > 0) || uploadingCount > 0) && (
             <div className="mt-3 space-y-3">
               <textarea
                 value={comment || ""}
@@ -52,14 +55,22 @@ export default function ItemRow({ item, answer, comment, photoList, setAnswer, s
               />
               <div className="flex items-center gap-2 flex-wrap">
                 {photoList?.map((p, i) => (
-                  <div key={i} className="w-16 h-16 rounded-md bg-stone-100 border border-stone-200 overflow-hidden relative group">
-                    <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
+                  <div key={p.path || p.url || i} className="w-16 h-16 rounded-md bg-stone-100 border border-stone-200 overflow-hidden relative group">
+                    <img src={p.url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
                     <button
                       onClick={() => removePhoto(i)}
                       className="absolute top-0.5 right-0.5 w-5 h-5 bg-stone-900/70 hover:bg-red-600 text-white rounded-full flex items-center justify-center md:opacity-0 md:group-hover:opacity-100"
                     >
                       <X className="w-2.5 h-2.5" />
                     </button>
+                  </div>
+                ))}
+                {Array.from({ length: uploadingCount || 0 }).map((_, i) => (
+                  <div
+                    key={`upload-${i}`}
+                    className="w-16 h-16 rounded-md bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400"
+                  >
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   </div>
                 ))}
                 <input
@@ -69,7 +80,10 @@ export default function ItemRow({ item, answer, comment, photoList, setAnswer, s
                   capture="environment"
                   multiple
                   className="hidden"
-                  onChange={(e) => setPhoto(e.target.files)}
+                  onChange={(e) => {
+                    setPhoto(e.target.files);
+                    e.target.value = "";
+                  }}
                 />
                 <button
                   onClick={() => fileRef.current?.click()}

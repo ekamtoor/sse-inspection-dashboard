@@ -2,7 +2,8 @@ import { ChevronDown, ChevronRight, ShieldAlert } from "lucide-react";
 import ItemRow from "./ItemRow.jsx";
 
 export default function SectionBlock({
-  section, open, onToggle, answers, comments, photos, setAnswer, setComment, setPhoto, removePhoto,
+  section, open, onToggle, answers, comments, photos, uploadingByItem,
+  setAnswer, setComment, setPhoto, removePhoto,
 }) {
   const earned = section.items.reduce((a, it) => a + (answers[it.id] === "pass" ? it.pts : 0), 0);
   const total = section.items.reduce((a, it) => a + it.pts, 0);
@@ -63,6 +64,7 @@ export default function SectionBlock({
               answer={answers[it.id]}
               comment={comments[it.id]}
               photoList={photos[it.id]}
+              uploadingCount={uploadingByItem?.[it.id] || 0}
               setAnswer={(v) => setAnswer(it.id, v)}
               setComment={(v) => setComment(it.id, v)}
               setPhoto={(f) => setPhoto(it.id, f)}

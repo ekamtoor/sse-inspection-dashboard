@@ -457,6 +457,7 @@ function AppShell({ user }) {
               setInspection={setActiveInspection}
               onComplete={completeInspection}
               onCancel={cancelInspection}
+              user={user}
             />
           )}
 

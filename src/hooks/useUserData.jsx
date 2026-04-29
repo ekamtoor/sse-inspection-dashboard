@@ -26,20 +26,6 @@ const SEEDS = {
   view: "dashboard",
 };
 
-// Photos are blob URLs (URL.createObjectURL) that don't survive a refresh — and
-// pushing them to Postgres just bloats the row with dead pointers. Strip them
-// from the in-progress walkthroughs before persisting; cross-device photo sync
-// is a separate Supabase Storage feature.
-function stripPhotos(value) {
-  if (!value) return value;
-  return { ...value, photos: {} };
-}
-
-const WRITE_TRANSFORMS = {
-  active_inspection: stripPhotos,
-  active_internal: stripPhotos,
-};
-
 const DataContext = createContext(null);
 
 export function DataProvider({ user, children }) {
@@ -108,29 +94,6 @@ export function DataProvider({ user, children }) {
           if (payload.new?.sync_token === lastSentTokenRef.current) return;
           const next = {};
           for (const k of KEYS) next[k] = payload.new?.[k] ?? SEEDS[k];
-
-          // Photos are device-local. If the in-progress walkthrough still
-          // matches the same id locally, keep our captured photos rather than
-          // letting the cross-device echo wipe them.
-          const localActive = latestRef.current?.active_inspection;
-          if (
-            next.active_inspection &&
-            localActive &&
-            next.active_inspection.id === localActive.id &&
-            localActive.photos
-          ) {
-            next.active_inspection = { ...next.active_inspection, photos: localActive.photos };
-          }
-          const localOps = latestRef.current?.active_internal;
-          if (
-            next.active_internal &&
-            localOps &&
-            next.active_internal.id === localOps.id &&
-            localOps.photos
-          ) {
-            next.active_internal = { ...next.active_internal, photos: localOps.photos };
-          }
-
           latestRef.current = next;
           setData(next);
         }
@@ -163,10 +126,7 @@ export function DataProvider({ user, children }) {
           const token = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           lastSentTokenRef.current = token;
           const payload = { sync_token: token, updated_at: new Date().toISOString() };
-          for (const k of KEYS) {
-            const transform = WRITE_TRANSFORMS[k];
-            payload[k] = transform ? transform(latestRef.current[k]) : latestRef.current[k];
-          }
+          for (const k of KEYS) payload[k] = latestRef.current[k];
           const { error: writeErr } = await supabase
             .from("user_data")
             .update(payload)

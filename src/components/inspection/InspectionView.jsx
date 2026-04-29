@@ -2,10 +2,12 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ClipboardCheck, FileText, ShieldAlert } from "lucide-react";
 import { SCHEMA } from "../../data/schema.js";
 import { computeScore } from "../../lib/scoring.js";
+import { uploadPhoto, deletePhoto } from "../../lib/photos.js";
 import SectionBlock from "./SectionBlock.jsx";
 
-export default function InspectionView({ inspection, setInspection, onComplete, onCancel }) {
+export default function InspectionView({ inspection, setInspection, onComplete, onCancel, user }) {
   const [openSection, setOpenSection] = useState("image");
+  const [uploadingByItem, setUploadingByItem] = useState({});
 
   if (!inspection) {
     return (
@@ -19,21 +21,52 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
     );
   }
 
-  const setAnswer = (id, v) => setInspection({ ...inspection, answers: { ...inspection.answers, [id]: v } });
-  const setComment = (id, v) => setInspection({ ...inspection, comments: { ...inspection.comments, [id]: v } });
-  const setPhoto = (id, files) => {
-    if (!files || files.length === 0) return;
-    const list = Array.from(files).map((f) => ({ url: URL.createObjectURL(f), name: f.name }));
-    setInspection({
-      ...inspection,
-      photos: { ...inspection.photos, [id]: [...(inspection.photos[id] || []), ...list] },
+  const setAnswer = (id, v) =>
+    setInspection((curr) => ({ ...curr, answers: { ...curr.answers, [id]: v } }));
+  const setComment = (id, v) =>
+    setInspection((curr) => ({ ...curr, comments: { ...curr.comments, [id]: v } }));
+
+  const setPhoto = async (id, files) => {
+    if (!files || files.length === 0 || !user || !inspection) return;
+    const fileArr = Array.from(files);
+    setUploadingByItem((u) => ({ ...u, [id]: (u[id] || 0) + fileArr.length }));
+    const inspectionIdAtStart = inspection.id;
+    const uploaded = [];
+    for (const f of fileArr) {
+      try {
+        const result = await uploadPhoto(user.id, inspectionIdAtStart, f);
+        uploaded.push(result);
+      } catch (err) {
+        console.error("Photo upload failed:", err);
+        // Surface a simple alert; toast plumbing isn't reachable from here.
+        // eslint-disable-next-line no-alert
+        alert(`Couldn't upload ${f.name}: ${err?.message || "unknown error"}`);
+      }
+    }
+    setInspection((curr) => {
+      if (!curr || curr.id !== inspectionIdAtStart) return curr;
+      return {
+        ...curr,
+        photos: { ...curr.photos, [id]: [...(curr.photos?.[id] || []), ...uploaded] },
+      };
+    });
+    setUploadingByItem((u) => {
+      const next = { ...u, [id]: Math.max(0, (u[id] || 0) - fileArr.length) };
+      if (!next[id]) delete next[id];
+      return next;
     });
   };
-  const removePhoto = (id, idx) =>
-    setInspection({
-      ...inspection,
-      photos: { ...inspection.photos, [id]: (inspection.photos[id] || []).filter((_, i) => i !== idx) },
-    });
+
+  const removePhoto = (id, idx) => {
+    const target = inspection.photos?.[id]?.[idx];
+    setInspection((curr) => ({
+      ...curr,
+      photos: { ...curr.photos, [id]: (curr.photos?.[id] || []).filter((_, i) => i !== idx) },
+    }));
+    if (target?.path) {
+      deletePhoto(target.path);
+    }
+  };
 
   const score = useMemo(() => computeScore(inspection.answers), [inspection.answers]);
   const failed = SCHEMA.flatMap((sec) => sec.items.filter((it) => inspection.answers[it.id] === "fail"));
@@ -148,6 +181,7 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
             answers={inspection.answers}
             comments={inspection.comments}
             photos={inspection.photos}
+            uploadingByItem={uploadingByItem}
             setAnswer={setAnswer}
             setComment={setComment}
             setPhoto={setPhoto}
