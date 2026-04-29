@@ -27,6 +27,7 @@ import CorporateView from "./components/corporate/CorporateView.jsx";
 import CorporateForm from "./components/corporate/CorporateForm.jsx";
 import IssuesView from "./components/issues/IssuesView.jsx";
 import IssueDetailModal from "./components/issues/IssueDetailModal.jsx";
+import IssueFormModal from "./components/issues/IssueFormModal.jsx";
 import InspectorsView from "./components/inspectors/InspectorsView.jsx";
 import InspectorFormModal from "./components/inspectors/InspectorFormModal.jsx";
 
@@ -83,6 +84,7 @@ function AppShell({ user }) {
   const [showSiteForm, setShowSiteForm] = useState(false);
   const [editingSite,  setEditingSite]  = useState(null);
   const [showCorpForm, setShowCorpForm] = useState(false);
+  const [showIssueForm, setShowIssueForm] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
@@ -405,6 +407,17 @@ function AppShell({ user }) {
     setIssues((prev) => (prev || []).map((i) => (i.id === issue.id ? issue : i)));
     toast("Issue updated.");
   };
+  const addIssue = (form) => {
+    const entry = { id: `ISS-${Date.now()}`, ...form };
+    setIssues((prev) => [entry, ...(prev || [])]);
+    setShowIssueForm(false);
+    toast("Issue added.");
+  };
+  const deleteIssue = (id) => {
+    setIssues((prev) => (prev || []).filter((i) => i.id !== id));
+    setIssueDetail(null);
+    toast("Issue deleted.");
+  };
 
   const addScheduled = (form) => {
     const entry = { id: `S-${Date.now()}`, ...form };
@@ -662,7 +675,12 @@ function AppShell({ user }) {
           )}
 
           {view === "issues" && (
-            <IssuesView issues={issues || []} sites={sitesEnriched} setIssueDetail={setIssueDetail} />
+            <IssuesView
+              issues={issues || []}
+              sites={sitesEnriched}
+              setIssueDetail={setIssueDetail}
+              onAdd={() => setShowIssueForm(true)}
+            />
           )}
 
           {view === "inspectors" && (
@@ -725,11 +743,28 @@ function AppShell({ user }) {
         />
       )}
 
+      {showIssueForm && (
+        <IssueFormModal
+          sites={sitesEnriched}
+          inspectors={inspectors || []}
+          onSubmit={addIssue}
+          onClose={() => setShowIssueForm(false)}
+        />
+      )}
+
       {issueDetail && (
         <IssueDetailModal
           issue={issueDetail}
           sites={sitesEnriched}
           onUpdate={updateIssue}
+          onDelete={(iss) =>
+            setConfirmDialog({
+              title: "Delete this issue?",
+              message: "Removes the issue from the tracker permanently.",
+              confirmLabel: "Delete",
+              onConfirm: () => deleteIssue(iss.id),
+            })
+          }
           onClose={() => setIssueDetail(null)}
         />
       )}

@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import SeverityDot from "../shared/SeverityDot.jsx";
 
-export default function IssuesView({ issues, sites, setIssueDetail }) {
+export default function IssuesView({ issues, sites, setIssueDetail, onAdd }) {
   const [filter, setFilter] = useState("all");
 
   const cols = [
@@ -13,30 +14,40 @@ export default function IssuesView({ issues, sites, setIssueDetail }) {
 
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
-      <div className="flex items-center gap-1.5 md:gap-2 flex-wrap overflow-x-auto pb-1 -mx-1 px-1">
-        <button
-          onClick={() => setFilter("all")}
-          className={`text-xs font-medium px-3 py-1.5 rounded-md whitespace-nowrap ${
-            filter === "all"
-              ? "bg-stone-900 text-white"
-              : "bg-white border border-stone-200 text-stone-700 hover:bg-stone-50"
-          }`}
-        >
-          All sites
-        </button>
-        {sites.map((s) => (
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 md:gap-2 flex-wrap overflow-x-auto pb-1 -mx-1 px-1 flex-1 min-w-0">
           <button
-            key={s.id}
-            onClick={() => setFilter(s.id)}
+            onClick={() => setFilter("all")}
             className={`text-xs font-medium px-3 py-1.5 rounded-md whitespace-nowrap ${
-              filter === s.id
+              filter === "all"
                 ? "bg-stone-900 text-white"
                 : "bg-white border border-stone-200 text-stone-700 hover:bg-stone-50"
             }`}
           >
-            {s.name}
+            All sites
           </button>
-        ))}
+          {sites.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setFilter(s.id)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-md whitespace-nowrap ${
+                filter === s.id
+                  ? "bg-stone-900 text-white"
+                  : "bg-white border border-stone-200 text-stone-700 hover:bg-stone-50"
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+        {onAdd && (
+          <button
+            onClick={onAdd}
+            className="bg-stone-900 hover:bg-stone-800 text-white text-sm font-medium px-3 md:px-4 py-2 rounded-md flex items-center gap-1.5 flex-shrink-0"
+          >
+            <Plus className="w-4 h-4" /> <span className="hidden md:inline">New issue</span><span className="md:hidden">New</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">

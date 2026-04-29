@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { X, Mail } from "lucide-react";
+import { X, Mail, Trash2 } from "lucide-react";
 import SeverityDot from "../shared/SeverityDot.jsx";
 import StatusPill from "../shared/StatusPill.jsx";
 
-export default function IssueDetailModal({ issue, sites, onUpdate, onClose }) {
+export default function IssueDetailModal({ issue, sites, onUpdate, onDelete, onClose }) {
   const [note, setNote] = useState(issue.note || "");
   const [status, setStatus] = useState(issue.status);
   const site = sites.find((s) => s.id === issue.siteId);
@@ -107,11 +107,22 @@ export default function IssueDetailModal({ issue, sites, onUpdate, onClose }) {
           )}
         </div>
 
-        <div className="px-5 md:px-6 py-4 border-t border-stone-200 flex items-center justify-end gap-2 flex-shrink-0">
-          <button onClick={onClose} className="text-stone-500 hover:text-stone-900 text-sm px-4 py-2 rounded-md">Cancel</button>
-          <button onClick={save} className="bg-stone-900 hover:bg-stone-800 text-white text-sm font-medium px-4 py-2 rounded-md">
-            Save changes
-          </button>
+        <div className="px-5 md:px-6 py-4 border-t border-stone-200 flex items-center justify-between gap-2 flex-shrink-0">
+          {onDelete ? (
+            <button
+              onClick={() => onDelete(issue)}
+              className="text-xs font-medium px-2 md:px-3 py-2 rounded-md border border-stone-300 text-stone-600 hover:text-red-600 hover:border-red-300 hover:bg-red-50 flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Delete</span>
+            </button>
+          ) : <span />}
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="text-stone-500 hover:text-stone-900 text-sm px-4 py-2 rounded-md">Cancel</button>
+            <button onClick={save} className="bg-stone-900 hover:bg-stone-800 text-white text-sm font-medium px-4 py-2 rounded-md">
+              Save changes
+            </button>
+          </div>
         </div>
       </div>
     </div>
