@@ -1,9 +1,9 @@
 import {
   LayoutDashboard, MapPin, ClipboardCheck, AlertTriangle, FileText, Calendar,
-  Wrench, Archive, Shield,
+  Wrench, Archive, Shield, LogOut,
 } from "lucide-react";
 
-export default function Sidebar({ view, setView, activeInspection, activeInternal }) {
+export default function Sidebar({ view, setView, activeInspection, activeInternal, userEmail, onSignOut }) {
   const nav = [
     { id: "dashboard",  label: "Dashboard",         icon: LayoutDashboard },
     { id: "sites",      label: "Sites",             icon: MapPin },
@@ -57,12 +57,21 @@ export default function Sidebar({ view, setView, activeInspection, activeInterna
       <div className="p-4 border-t border-stone-800">
         <div className="bg-stone-800/60 rounded-lg p-3 flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-stone-900 font-mono text-xs font-semibold">
-            MR
+            {(userEmail || "?").slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium truncate">M. Reyes</div>
+            <div className="text-sm font-medium truncate">{userEmail || "Signed out"}</div>
             <div className="text-[11px] text-stone-400">District Ops</div>
           </div>
+          {onSignOut && (
+            <button
+              onClick={onSignOut}
+              title="Sign out"
+              className="p-1.5 text-stone-400 hover:text-stone-100 hover:bg-stone-700 rounded-md flex-shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </aside>

@@ -1,6 +1,6 @@
-import { ClipboardCheck, Wrench, FileText, Archive } from "lucide-react";
+import { ClipboardCheck, Wrench, FileText, Archive, LogOut } from "lucide-react";
 
-export default function MobileMoreSheet({ view, setView, activeInspection, activeInternal, onClose }) {
+export default function MobileMoreSheet({ view, setView, activeInspection, activeInternal, onClose, userEmail, onSignOut }) {
   const items = [
     { id: "inspection", label: "Pre-Inspection",    icon: ClipboardCheck, badge: activeInspection ? "live" : null },
     { id: "internal",   label: "Internal Ops",      icon: Wrench,         badge: activeInternal ? "live" : null },
@@ -42,6 +42,24 @@ export default function MobileMoreSheet({ view, setView, activeInspection, activ
               </button>
             );
           })}
+
+          {onSignOut && (
+            <>
+              <div className="text-[10px] uppercase tracking-widest text-stone-500 px-3 pt-4 pb-2 font-medium">
+                Account
+              </div>
+              {userEmail && (
+                <div className="px-3 pb-1 text-xs text-stone-500 truncate">{userEmail}</div>
+              )}
+              <button
+                onClick={onSignOut}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-md text-base text-stone-700 hover:bg-stone-50"
+              >
+                <LogOut className="w-5 h-5 text-stone-700" strokeWidth={2} />
+                <span className="flex-1 text-left font-medium">Sign out</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

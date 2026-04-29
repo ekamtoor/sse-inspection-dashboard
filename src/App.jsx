@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 
-import { useStoredState } from "./hooks/useStoredState.js";
+import { supabase } from "./lib/supabase.js";
+import { DataProvider, useDataContext, useUserDataKey } from "./hooks/useUserData.jsx";
+import LoginScreen from "./components/auth/LoginScreen.jsx";
 import { SCHEMA } from "./data/schema.js";
 import { computeScore } from "./lib/scoring.js";
-import { SEED_SITES, SEED_SCHEDULED, SEED_ISSUES, SEED_CORPORATE } from "./data/seed.js";
 
 import Sidebar from "./components/layout/Sidebar.jsx";
 import MobileBottomNav from "./components/layout/MobileBottomNav.jsx";
@@ -25,16 +27,45 @@ import CorporateForm from "./components/corporate/CorporateForm.jsx";
 import IssuesView from "./components/issues/IssuesView.jsx";
 import IssueDetailModal from "./components/issues/IssueDetailModal.jsx";
 
-export default function App() {
-  // Persisted data
-  const [sites, setSites]                     = useStoredState("vg.sites",          SEED_SITES);
-  const [scheduled, setScheduled]             = useStoredState("vg.scheduled",      SEED_SCHEDULED);
-  const [issues, setIssues]                   = useStoredState("vg.issues",         SEED_ISSUES);
-  const [completed, setCompleted]             = useStoredState("vg.reports",        []);
-  const [corporate, setCorporate]             = useStoredState("vg.corporate",      SEED_CORPORATE);
-  const [internalAudits, setInternalAudits]   = useStoredState("vg.internalAudits", []);
+function FullScreenLoader({ label }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-stone-50">
+      <div className="flex items-center gap-3 text-stone-500 text-sm">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        {label || "Loading…"}
+      </div>
+    </div>
+  );
+}
 
-  // Ephemeral UI state
+export default function App() {
+  const [session, setSession] = useState(undefined);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) return <FullScreenLoader label="Loading…" />;
+  if (!session) return <LoginScreen />;
+
+  return (
+    <DataProvider user={session.user}>
+      <AppShell user={session.user} />
+    </DataProvider>
+  );
+}
+
+function AppShell({ user }) {
+  const { data, error } = useDataContext();
+  const [sites, setSites]                     = useUserDataKey("sites");
+  const [scheduled, setScheduled]             = useUserDataKey("scheduled");
+  const [issues, setIssues]                   = useUserDataKey("issues");
+  const [completed, setCompleted]             = useUserDataKey("reports");
+  const [corporate, setCorporate]             = useUserDataKey("corporate");
+  const [internalAudits, setInternalAudits]   = useUserDataKey("internal_audits");
+
   const [view, setView] = useState("dashboard");
   const [activeInspection, setActiveInspection] = useState(null);
   const [activeInternal,   setActiveInternal]   = useState(null);
@@ -55,48 +86,48 @@ export default function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
   };
 
-  // Closes mobile more-sheet + clears any open detail when navigating
   const navigate = (v) => {
     setView(v);
     setMoreOpen(false);
     setSiteDetailId(null);
   };
 
-  // Sites enriched with open issues count
   const sitesEnriched = useMemo(
     () =>
-      sites.map((s) => ({
+      (sites || []).map((s) => ({
         ...s,
-        openIssues: issues.filter((i) => i.siteId === s.id && i.status !== "resolved").length,
+        openIssues: (issues || []).filter((i) => i.siteId === s.id && i.status !== "resolved").length,
       })),
     [sites, issues]
   );
 
-  // Site CRUD
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   const addSite = (siteData) => {
     const id = siteData.id || `site-${Date.now()}`;
-    setSites((prev) => [...prev, { ...siteData, id, lastScore: 0, lastInspection: null }]);
+    setSites((prev) => [...(prev || []), { ...siteData, id, lastScore: 0, lastInspection: null }]);
     setShowSiteForm(false);
     setEditingSite(null);
     toast("Site added.");
   };
   const updateSite = (siteData) => {
-    setSites((prev) => prev.map((s) => (s.id === siteData.id ? { ...s, ...siteData } : s)));
+    setSites((prev) => (prev || []).map((s) => (s.id === siteData.id ? { ...s, ...siteData } : s)));
     setShowSiteForm(false);
     setEditingSite(null);
     toast("Site updated.");
   };
   const deleteSite = (siteId) => {
-    setSites((prev) => prev.filter((s) => s.id !== siteId));
-    setScheduled((prev) => prev.filter((s) => s.siteId !== siteId));
-    setIssues((prev) => prev.filter((i) => i.siteId !== siteId));
+    setSites((prev) => (prev || []).filter((s) => s.id !== siteId));
+    setScheduled((prev) => (prev || []).filter((s) => s.siteId !== siteId));
+    setIssues((prev) => (prev || []).filter((i) => i.siteId !== siteId));
     setSiteDetailId(null);
     toast("Site removed.");
   };
 
-  // Inspection lifecycle
   const startInspection = (siteId, scheduleId = null) => {
-    const site = sites.find((s) => s.id === siteId);
+    const site = (sites || []).find((s) => s.id === siteId);
     if (!site) return;
     setActiveInspection({
       id: `INSP-${Date.now()}`,
@@ -129,7 +160,7 @@ export default function App() {
       id: `RPT-${Date.now()}`,
       siteId: activeInspection.siteId,
       completedAt: new Date().toISOString(),
-      inspector: "M. Reyes",
+      inspector: user.email || "Inspector",
       score: score.earned,
       total: score.total,
       answers: activeInspection.answers,
@@ -137,11 +168,10 @@ export default function App() {
       photos: activeInspection.photos,
       fails,
     };
-    setCompleted((prev) => [report, ...prev]);
+    setCompleted((prev) => [report, ...(prev || [])]);
 
-    // Update site lastScore and status
     setSites((prev) =>
-      prev.map((s) =>
+      (prev || []).map((s) =>
         s.id === activeInspection.siteId
           ? {
               ...s,
@@ -154,7 +184,6 @@ export default function App() {
       )
     );
 
-    // Auto-create issues from fails
     if (fails.length > 0) {
       const newIssues = fails.map((f) => {
         const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
@@ -168,15 +197,14 @@ export default function App() {
           opened: new Date().toISOString().slice(0, 10),
           note:
             (sec?.zeroTolerance ? "[ZERO TOLERANCE] " : "") + (f.comment || "Auto-generated from internal pre-inspection."),
-          assignee: "M. Reyes",
+          assignee: user.email || "Inspector",
         };
       });
-      setIssues((prev) => [...newIssues, ...prev]);
+      setIssues((prev) => [...newIssues, ...(prev || [])]);
     }
 
-    // Remove originating schedule entry
     if (activeInspection.scheduleId) {
-      setScheduled((prev) => prev.filter((s) => s.id !== activeInspection.scheduleId));
+      setScheduled((prev) => (prev || []).filter((s) => s.id !== activeInspection.scheduleId));
     }
 
     toast(
@@ -201,9 +229,8 @@ export default function App() {
     });
   };
 
-  // Internal ops lifecycle
   const startInternal = (siteId) => {
-    const site = sites.find((s) => s.id === siteId);
+    const site = (sites || []).find((s) => s.id === siteId);
     if (!site) return;
     setActiveInternal({
       id: `OPS-${Date.now()}`,
@@ -219,7 +246,7 @@ export default function App() {
   const completeInternal = () => {
     if (!activeInternal) return;
     const audit = { ...activeInternal, completedAt: new Date().toISOString() };
-    setInternalAudits((prev) => [audit, ...prev]);
+    setInternalAudits((prev) => [audit, ...(prev || [])]);
     toast("Internal ops walk archived.");
     setActiveInternal(null);
     navigate("dashboard");
@@ -237,31 +264,46 @@ export default function App() {
     });
   };
 
-  // Issues
   const updateIssue = (issue) => {
-    setIssues((prev) => prev.map((i) => (i.id === issue.id ? issue : i)));
+    setIssues((prev) => (prev || []).map((i) => (i.id === issue.id ? issue : i)));
     toast("Issue updated.");
   };
 
-  // Schedule
   const addScheduled = (form) => {
     const entry = { id: `S-${Date.now()}`, ...form };
-    setScheduled((prev) => [...prev, entry]);
+    setScheduled((prev) => [...(prev || []), entry]);
     toast("Inspection scheduled.");
     return entry;
   };
   const deleteScheduled = (id) => {
-    setScheduled((prev) => prev.filter((s) => s.id !== id));
+    setScheduled((prev) => (prev || []).filter((s) => s.id !== id));
     toast("Schedule removed.");
   };
 
-  // Corporate
   const addCorporate = (form) => {
     const entry = { id: `CORP-${Date.now()}`, ...form };
-    setCorporate((prev) => [entry, ...prev]);
+    setCorporate((prev) => [entry, ...(prev || [])]);
     setShowCorpForm(false);
     toast("Corporate report archived.");
   };
+
+  if (!data) return <FullScreenLoader label="Loading your inspections…" />;
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-stone-50 p-6">
+        <div className="max-w-md text-center">
+          <h2 className="font-display text-lg font-semibold mb-2">Couldn't load your data</h2>
+          <p className="text-sm text-stone-600 mb-4">{error}</p>
+          <button
+            onClick={signOut}
+            className="bg-stone-900 hover:bg-stone-800 text-white text-sm px-4 py-2 rounded-md"
+          >
+            Sign out and retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const siteDetail = siteDetailId ? sitesEnriched.find((s) => s.id === siteDetailId) : null;
 
@@ -272,6 +314,8 @@ export default function App() {
         setView={navigate}
         activeInspection={activeInspection}
         activeInternal={activeInternal}
+        userEmail={user.email}
+        onSignOut={signOut}
       />
 
       <main className="flex-1 flex flex-col min-w-0">
@@ -289,9 +333,9 @@ export default function App() {
               startInspection={startInspection}
               startInternal={startInternal}
               sites={sitesEnriched}
-              scheduled={scheduled}
-              issues={issues}
-              completed={completed}
+              scheduled={scheduled || []}
+              issues={issues || []}
+              completed={completed || []}
               setIssueDetail={setIssueDetail}
             />
           )}
@@ -317,10 +361,10 @@ export default function App() {
           {view === "sites" && siteDetail && (
             <SiteDetailView
               site={siteDetail}
-              scheduled={scheduled}
-              issues={issues}
-              completed={completed}
-              corporate={corporate}
+              scheduled={scheduled || []}
+              issues={issues || []}
+              completed={completed || []}
+              corporate={corporate || []}
               onBack={() => setSiteDetailId(null)}
               onEdit={(s) => { setEditingSite(s); setShowSiteForm(true); }}
               onDelete={(s) =>
@@ -342,7 +386,7 @@ export default function App() {
           {view === "schedule" && (
             <ScheduleView
               sites={sitesEnriched}
-              scheduled={scheduled}
+              scheduled={scheduled || []}
               addScheduled={addScheduled}
               startInspection={startInspection}
               startInternal={startInternal}
@@ -372,7 +416,7 @@ export default function App() {
 
           {view === "reports" && (
             <ReportsView
-              reports={completed}
+              reports={completed || []}
               sites={sitesEnriched}
               detail={reportDetail}
               setDetail={setReportDetail}
@@ -381,9 +425,9 @@ export default function App() {
 
           {view === "corporate" && (
             <CorporateView
-              corporate={corporate}
+              corporate={corporate || []}
               sites={sitesEnriched}
-              completed={completed}
+              completed={completed || []}
               detail={corpDetail}
               setDetail={setCorpDetail}
               onAdd={() => setShowCorpForm(true)}
@@ -391,7 +435,7 @@ export default function App() {
           )}
 
           {view === "issues" && (
-            <IssuesView issues={issues} sites={sitesEnriched} setIssueDetail={setIssueDetail} />
+            <IssuesView issues={issues || []} sites={sitesEnriched} setIssueDetail={setIssueDetail} />
           )}
         </div>
 
@@ -412,6 +456,8 @@ export default function App() {
           activeInspection={activeInspection}
           activeInternal={activeInternal}
           onClose={() => setMoreOpen(false)}
+          userEmail={user.email}
+          onSignOut={signOut}
         />
       )}
 
