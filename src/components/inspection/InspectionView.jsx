@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ClipboardCheck, FileText, ShieldAlert } from "lucide-react";
+import { ChevronLeft, ClipboardCheck, FileText, ShieldAlert, Trash2 } from "lucide-react";
 import { SCHEMA } from "../../data/schema.js";
 import { computeScore } from "../../lib/scoring.js";
 import { uploadPhoto, deletePhoto } from "../../lib/photos.js";
 import SectionBlock from "./SectionBlock.jsx";
 
-export default function InspectionView({ inspection, setInspection, onComplete, onCancel, user }) {
+export default function InspectionView({ inspection, setInspection, onComplete, onLeave, onDiscard, user }) {
   const [openSection, setOpenSection] = useState("image");
   const [uploadingByItem, setUploadingByItem] = useState({});
 
@@ -80,13 +80,24 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
         {/* Mobile header */}
         <div className="md:hidden px-4 py-3">
           <div className="flex items-center gap-2 mb-2">
-            <button onClick={onCancel} className="p-1.5 hover:bg-stone-100 rounded-md flex-shrink-0">
+            <button
+              onClick={onLeave}
+              title="Save & leave"
+              className="p-1.5 hover:bg-stone-100 rounded-md flex-shrink-0"
+            >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{inspection.site?.name}</div>
-              <div className="text-[11px] text-stone-500">Pre-Inspection</div>
+              <div className="text-[11px] text-stone-500">Pre-Inspection · auto-saving</div>
             </div>
+            <button
+              onClick={onDiscard}
+              title="Discard"
+              className="p-2 hover:bg-red-50 rounded-md text-stone-400 hover:text-red-600 flex-shrink-0"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
             <button
               onClick={onComplete}
               disabled={score.answered === 0}
@@ -115,9 +126,20 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
 
         {/* Desktop header */}
         <div className="hidden md:block px-8 py-4">
-          <div className="flex items-center gap-6">
-            <button onClick={onCancel} className="p-1.5 hover:bg-stone-100 rounded-md">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onLeave}
+              title="Save & leave — resume from dashboard"
+              className="p-1.5 hover:bg-stone-100 rounded-md"
+            >
               <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onDiscard}
+              title="Discard this in-progress walkthrough"
+              className="text-xs font-medium text-stone-500 hover:text-red-600 flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-red-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Discard
             </button>
             <div className="flex-1 grid grid-cols-4 gap-6">
               <div>

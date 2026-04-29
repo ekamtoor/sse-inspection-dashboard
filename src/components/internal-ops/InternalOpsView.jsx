@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { ChevronLeft, FileText, Wrench } from "lucide-react";
+import { ChevronLeft, FileText, Wrench, Trash2 } from "lucide-react";
 import { INTERNAL_OPS } from "../../data/internalOps.js";
+import { uploadPhoto, deletePhoto } from "../../lib/photos.js";
 import OpsSection from "./OpsSection.jsx";
 
-export default function InternalOpsView({ audit, setAudit, sites, onComplete, onCancel, startInternal }) {
+export default function InternalOpsView({
+  audit, setAudit, sites, onComplete, onLeave, onDiscard, startInternal, user,
+}) {
   const [openSection, setOpenSection] = useState("atm");
+  const [uploadingByItem, setUploadingByItem] = useState({});
 
   // No active audit yet — show site picker
   if (!audit) {
@@ -39,9 +43,50 @@ export default function InternalOpsView({ audit, setAudit, sites, onComplete, on
     );
   }
 
-  const setValue = (id, v) => setAudit({ ...audit, values: { ...audit.values, [id]: v } });
-  const setComment = (id, v) => setAudit({ ...audit, comments: { ...audit.comments, [id]: v } });
-  const setTobacco = (rows) => setAudit({ ...audit, tobacco: typeof rows === "function" ? rows(audit.tobacco) : rows });
+  const setValue = (id, v) =>
+    setAudit((curr) => ({ ...curr, values: { ...curr.values, [id]: v } }));
+  const setComment = (id, v) =>
+    setAudit((curr) => ({ ...curr, comments: { ...curr.comments, [id]: v } }));
+  const setTobacco = (rows) =>
+    setAudit((curr) => ({ ...curr, tobacco: typeof rows === "function" ? rows(curr.tobacco) : rows }));
+
+  const setPhoto = async (id, files) => {
+    if (!files || files.length === 0 || !user || !audit) return;
+    const fileArr = Array.from(files);
+    setUploadingByItem((u) => ({ ...u, [id]: (u[id] || 0) + fileArr.length }));
+    const auditIdAtStart = audit.id;
+    const uploaded = [];
+    for (const f of fileArr) {
+      try {
+        uploaded.push(await uploadPhoto(user.id, auditIdAtStart, f));
+      } catch (err) {
+        console.error("Photo upload failed:", err);
+        // eslint-disable-next-line no-alert
+        alert(`Couldn't upload ${f.name}: ${err?.message || "unknown error"}`);
+      }
+    }
+    setAudit((curr) => {
+      if (!curr || curr.id !== auditIdAtStart) return curr;
+      return {
+        ...curr,
+        photos: { ...curr.photos, [id]: [...(curr.photos?.[id] || []), ...uploaded] },
+      };
+    });
+    setUploadingByItem((u) => {
+      const next = { ...u, [id]: Math.max(0, (u[id] || 0) - fileArr.length) };
+      if (!next[id]) delete next[id];
+      return next;
+    });
+  };
+
+  const removePhoto = (id, idx) => {
+    const target = audit.photos?.[id]?.[idx];
+    setAudit((curr) => ({
+      ...curr,
+      photos: { ...curr.photos, [id]: (curr.photos?.[id] || []).filter((_, i) => i !== idx) },
+    }));
+    if (target?.path) deletePhoto(target.path);
+  };
 
   const isFlagged = (item, v) => {
     if (v === undefined || v === "") return false;
@@ -78,13 +123,24 @@ export default function InternalOpsView({ audit, setAudit, sites, onComplete, on
         {/* Mobile header */}
         <div className="md:hidden px-4 py-3">
           <div className="flex items-center gap-2 mb-2">
-            <button onClick={onCancel} className="p-1.5 hover:bg-stone-100 rounded-md flex-shrink-0">
+            <button
+              onClick={onLeave}
+              title="Save & leave"
+              className="p-1.5 hover:bg-stone-100 rounded-md flex-shrink-0"
+            >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{audit.site?.name}</div>
-              <div className="text-[11px] text-stone-500">Internal Ops</div>
+              <div className="text-[11px] text-stone-500">Internal Ops · auto-saving</div>
             </div>
+            <button
+              onClick={onDiscard}
+              title="Discard"
+              className="p-2 hover:bg-red-50 rounded-md text-stone-400 hover:text-red-600 flex-shrink-0"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
             <button
               onClick={onComplete}
               disabled={totalAnswered === 0}
@@ -109,9 +165,20 @@ export default function InternalOpsView({ audit, setAudit, sites, onComplete, on
 
         {/* Desktop header */}
         <div className="hidden md:block px-8 py-4">
-          <div className="flex items-center gap-6">
-            <button onClick={onCancel} className="p-1.5 hover:bg-stone-100 rounded-md">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onLeave}
+              title="Save & leave — resume from dashboard"
+              className="p-1.5 hover:bg-stone-100 rounded-md"
+            >
               <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onDiscard}
+              title="Discard this in-progress walkthrough"
+              className="text-xs font-medium text-stone-500 hover:text-red-600 flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-red-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Discard
             </button>
             <div className="flex-1 grid grid-cols-4 gap-6">
               <div>
@@ -158,9 +225,13 @@ export default function InternalOpsView({ audit, setAudit, sites, onComplete, on
             onToggle={() => setOpenSection(openSection === sec.id ? null : sec.id)}
             values={audit.values}
             comments={audit.comments}
+            photos={audit.photos || {}}
+            uploadingByItem={uploadingByItem}
             tobacco={audit.tobacco}
             setValue={setValue}
             setComment={setComment}
+            setPhoto={setPhoto}
+            removePhoto={removePhoto}
             setTobacco={setTobacco}
             isFlagged={isFlagged}
           />

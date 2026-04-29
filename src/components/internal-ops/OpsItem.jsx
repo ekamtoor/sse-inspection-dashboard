@@ -1,7 +1,15 @@
-import { CheckCircle2, XCircle } from "lucide-react";
+import { useRef } from "react";
+import { CheckCircle2, XCircle, Camera, X, Loader2 } from "lucide-react";
 import TobaccoAudit from "./TobaccoAudit.jsx";
 
-export default function OpsItem({ item, value, comment, tobacco, setValue, setComment, setTobacco, flagged }) {
+export default function OpsItem({
+  item, value, comment, photoList, uploadingCount, tobacco,
+  setValue, setComment, setPhoto, removePhoto, setTobacco, flagged,
+}) {
+  const fileRef = useRef();
+  const supportsPhotos = item.type !== "tobacco-audit";
+  const showCommentBlock = supportsPhotos && (value !== undefined || comment || (photoList && photoList.length > 0) || uploadingCount > 0);
+
   return (
     <div className={`px-4 md:px-6 py-4 md:py-5 ${flagged ? "bg-red-50/40" : ""}`}>
       <div className="flex items-start gap-3 md:gap-4">
@@ -72,8 +80,8 @@ export default function OpsItem({ item, value, comment, tobacco, setValue, setCo
             </div>
           )}
           {item.type === "tobacco-audit" && <TobaccoAudit rows={tobacco} setRows={setTobacco} />}
-          {(value !== undefined || comment) && item.type !== "tobacco-audit" && (
-            <div className="mt-3">
+          {showCommentBlock && (
+            <div className="mt-3 space-y-3">
               <textarea
                 value={comment || ""}
                 onChange={(e) => setComment(e.target.value)}
@@ -81,6 +89,46 @@ export default function OpsItem({ item, value, comment, tobacco, setValue, setCo
                 rows={2}
                 className="w-full text-sm bg-stone-50 border border-stone-200 rounded-md px-3 py-2 resize-none focus:outline-none focus:border-stone-400"
               />
+              <div className="flex items-center gap-2 flex-wrap">
+                {photoList?.map((p, i) => (
+                  <div key={p.path || p.url || i} className="w-16 h-16 rounded-md bg-stone-100 border border-stone-200 overflow-hidden relative group">
+                    <img src={p.url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                    <button
+                      onClick={() => removePhoto(i)}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 bg-stone-900/70 hover:bg-red-600 text-white rounded-full flex items-center justify-center md:opacity-0 md:group-hover:opacity-100"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))}
+                {Array.from({ length: uploadingCount || 0 }).map((_, i) => (
+                  <div
+                    key={`upload-${i}`}
+                    className="w-16 h-16 rounded-md bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400"
+                  >
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  </div>
+                ))}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    setPhoto(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="w-16 h-16 rounded-md border border-dashed border-stone-300 hover:border-stone-500 hover:bg-stone-50 flex flex-col items-center justify-center gap-0.5 text-stone-500"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span className="text-[9px] uppercase tracking-wider">Add</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

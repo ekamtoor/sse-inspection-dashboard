@@ -298,13 +298,16 @@ function AppShell({ user }) {
     if (!activeInspection) return;
     setConfirmDialog({
       title: "Discard pre-inspection?",
-      message: "Your in-progress walkthrough will be lost.",
+      message: "This permanently deletes your in-progress answers, comments, and photos.",
       confirmLabel: "Discard",
       onConfirm: () => {
         setActiveInspection(null);
         navigate("dashboard");
       },
     });
+  };
+  const leaveInspection = () => {
+    navigate("dashboard");
   };
 
   const startInternal = (siteId) => {
@@ -342,6 +345,7 @@ function AppShell({ user }) {
       startedAt: new Date().toISOString(),
       values: {},
       comments: {},
+      photos: {},
       tobacco: [],
     });
     navigate("internal");
@@ -358,13 +362,16 @@ function AppShell({ user }) {
     if (!activeInternal) return;
     setConfirmDialog({
       title: "Discard ops walk?",
-      message: "Your in-progress walkthrough will be lost.",
+      message: "This permanently deletes your in-progress values, comments, and photos.",
       confirmLabel: "Discard",
       onConfirm: () => {
         setActiveInternal(null);
         navigate("dashboard");
       },
     });
+  };
+  const leaveInternal = () => {
+    navigate("dashboard");
   };
 
   const updateIssue = (issue) => {
@@ -550,7 +557,8 @@ function AppShell({ user }) {
               inspection={activeInspection}
               setInspection={setActiveInspection}
               onComplete={completeInspection}
-              onCancel={cancelInspection}
+              onLeave={leaveInspection}
+              onDiscard={cancelInspection}
               user={user}
             />
           )}
@@ -561,8 +569,10 @@ function AppShell({ user }) {
               setAudit={setActiveInternal}
               sites={sitesEnriched}
               onComplete={completeInternal}
-              onCancel={cancelInternal}
+              onLeave={leaveInternal}
+              onDiscard={cancelInternal}
               startInternal={startInternal}
+              user={user}
             />
           )}
 

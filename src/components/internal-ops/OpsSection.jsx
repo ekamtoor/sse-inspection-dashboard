@@ -2,7 +2,8 @@ import { ChevronDown, ChevronRight, CircleDot } from "lucide-react";
 import OpsItem from "./OpsItem.jsx";
 
 export default function OpsSection({
-  section, open, onToggle, values, comments, tobacco, setValue, setComment, setTobacco, isFlagged,
+  section, open, onToggle, values, comments, photos, uploadingByItem, tobacco,
+  setValue, setComment, setPhoto, removePhoto, setTobacco, isFlagged,
 }) {
   const Icon = section.icon || CircleDot;
   const completed = section.items.filter((it) => values[it.id] !== undefined).length;
@@ -40,9 +41,13 @@ export default function OpsSection({
               item={it}
               value={values[it.id]}
               comment={comments[it.id]}
+              photoList={photos?.[it.id]}
+              uploadingCount={uploadingByItem?.[it.id] || 0}
               tobacco={tobacco}
               setValue={(v) => setValue(it.id, v)}
               setComment={(v) => setComment(it.id, v)}
+              setPhoto={(f) => setPhoto(it.id, f)}
+              removePhoto={(i) => removePhoto(it.id, i)}
               setTobacco={setTobacco}
               flagged={isFlagged(it, values[it.id])}
             />
