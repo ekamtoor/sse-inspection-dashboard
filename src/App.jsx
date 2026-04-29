@@ -6,6 +6,7 @@ import { DataProvider, useDataContext, useUserDataKey } from "./hooks/useUserDat
 import LoginScreen from "./components/auth/LoginScreen.jsx";
 import { SCHEMA } from "./data/schema.js";
 import { computeScore } from "./lib/scoring.js";
+import { deletePhoto } from "./lib/photos.js";
 
 import Sidebar from "./components/layout/Sidebar.jsx";
 import MobileBottomNav from "./components/layout/MobileBottomNav.jsx";
@@ -154,9 +155,35 @@ function AppShell({ user }) {
     toast("Site updated.");
   };
   const deleteSite = (siteId) => {
+    // Best-effort cleanup of any photos in Storage that belonged to this
+    // site's reports and ops audits, before we drop the rows that reference
+    // their paths.
+    const purgePhotosFrom = (records) => {
+      for (const r of records || []) {
+        if (r.siteId !== siteId) continue;
+        const photoMap = r.photos || {};
+        for (const list of Object.values(photoMap)) {
+          for (const p of list || []) {
+            if (p?.path) deletePhoto(p.path);
+          }
+        }
+      }
+    };
+    purgePhotosFrom(completed);
+    purgePhotosFrom(internalAudits);
+
     setSites((prev) => (prev || []).filter((s) => s.id !== siteId));
     setScheduled((prev) => (prev || []).filter((s) => s.siteId !== siteId));
     setIssues((prev) => (prev || []).filter((i) => i.siteId !== siteId));
+    setCompleted((prev) => (prev || []).filter((r) => r.siteId !== siteId));
+    setCorporate((prev) => (prev || []).filter((c) => c.siteId !== siteId));
+    setInternalAudits((prev) => (prev || []).filter((a) => a.siteId !== siteId));
+
+    if (activeInspection?.siteId === siteId) setActiveInspection(null);
+    if (activeInternal?.siteId === siteId) setActiveInternal(null);
+    if (reportDetail?.siteId === siteId) setReportDetail(null);
+    if (corpDetail?.siteId === siteId) setCorpDetail(null);
+
     setSiteDetailId(null);
     toast("Site removed.");
   };
@@ -506,7 +533,7 @@ function AppShell({ user }) {
               onDelete={(s) =>
                 setConfirmDialog({
                   title: `Delete ${s.name}?`,
-                  message: "This will also remove all related schedules and issues. Cannot be undone.",
+                  message: "Also removes every schedule, issue, report, corporate entry, ops audit, and photo tied to this site. Cannot be undone.",
                   onConfirm: () => deleteSite(s.id),
                 })
               }
@@ -526,7 +553,7 @@ function AppShell({ user }) {
               onDelete={(s) =>
                 setConfirmDialog({
                   title: `Delete ${s.name}?`,
-                  message: "This will also remove all related schedules and issues. Cannot be undone.",
+                  message: "Also removes every schedule, issue, report, corporate entry, ops audit, and photo tied to this site. Cannot be undone.",
                   onConfirm: () => deleteSite(s.id),
                 })
               }
