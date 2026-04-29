@@ -176,6 +176,35 @@ export async function generateReportPDF({ report, site }) {
 
   y = 62;
 
+  // ---- Cover-page brand stamp ----
+  if (brandLogo?.dataUrl) {
+    try {
+      const aspect = brandLogo.w / brandLogo.h;
+      const stampH = 18;
+      const stampW = stampH * aspect;
+      const stampX = PAGE_W - M - stampW;
+      const stampY = y;
+      pdf.addImage(
+        brandLogo.dataUrl,
+        "PNG",
+        stampX,
+        stampY,
+        stampW,
+        stampH,
+        undefined,
+        "FAST"
+      );
+      pdf.setFont("helvetica", "italic");
+      pdf.setFontSize(8);
+      setText(pdf, COLOR.muted);
+      const caption = "Prepared by Seven Star Energy";
+      pdf.text(caption, stampX + stampW - pdf.getTextWidth(caption), stampY + stampH + 3.2);
+      y += stampH + 8;
+    } catch {
+      // ignore logo embed failures
+    }
+  }
+
   // ---- ZT violation banner ----
   const ztFails = report.fails.filter((f) => {
     const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
@@ -403,35 +432,12 @@ export async function generateReportPDF({ report, site }) {
   // ---- Footer page numbers ----
   const pageCount = pdf.getNumberOfPages();
   const footerY = PAGE_H - 6;
-  const logoSize = 4.5;
   for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
-    let footerLeftX = M;
-    if (brandLogo?.dataUrl) {
-      try {
-        const aspect = brandLogo.w / brandLogo.h;
-        const lw = aspect >= 1 ? logoSize : logoSize * aspect;
-        const lh = aspect >= 1 ? logoSize / aspect : logoSize;
-        pdf.addImage(
-          brandLogo.dataUrl,
-          "PNG",
-          footerLeftX,
-          footerY - lh + 0.6,
-          lw,
-          lh,
-          undefined,
-          "FAST"
-        );
-        footerLeftX += lw + 1.5;
-      } catch {
-        // ignore logo embed failures
-      }
-    }
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     setText(pdf, COLOR.muted);
-    const leftText = `Vanguard · by Seven Star Energy · ${site?.name || ""} · ${dateStr}`;
-    pdf.text(leftText, footerLeftX, footerY);
+    pdf.text(`Vanguard · by Seven Star Energy · ${site?.name || ""} · ${dateStr}`, M, footerY);
     const right = `Page ${i} of ${pageCount}`;
     pdf.text(right, PAGE_W - M - pdf.getTextWidth(right), footerY);
   }

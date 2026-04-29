@@ -175,18 +175,15 @@ export default function LoginScreen() {
           )}
         </div>
 
-        <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-stone-400">
+        <div className="mt-7 flex flex-col items-center gap-2">
           <img
             src="/seven-star-logo.png"
-            alt=""
-            className="w-4 h-4 object-contain opacity-80"
+            alt="Seven Star Energy"
+            className="h-16 w-auto object-contain opacity-90"
             onError={(e) => { e.currentTarget.style.display = "none"; }}
           />
-          <span className="italic font-display">by Seven Star Energy</span>
+          <p className="text-[11px] text-stone-400 leading-relaxed">Internal use only</p>
         </div>
-        <p className="text-[11px] text-stone-400 text-center mt-2 leading-relaxed">
-          Internal use only
-        </p>
       </div>
     </div>
   );
