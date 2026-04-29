@@ -1,16 +1,93 @@
-import { ChevronLeft, ShieldAlert, Camera } from "lucide-react";
+import { useState } from "react";
+import { ChevronLeft, ShieldAlert, Download, Share2, Loader2 } from "lucide-react";
 import { SCHEMA } from "../../data/schema.js";
 import PriorityPill from "../shared/PriorityPill.jsx";
 
 export default function ReportDetail({ report, sites, onBack }) {
   const site = sites.find((s) => s.id === report.siteId);
   const ztFails = report.fails.filter((f) => SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id)));
+  const [pdfStatus, setPdfStatus] = useState("idle");
+  const canShare =
+    typeof navigator !== "undefined" &&
+    typeof navigator.canShare === "function" &&
+    typeof navigator.share === "function";
+
+  const downloadPdf = async () => {
+    if (pdfStatus !== "idle") return;
+    setPdfStatus("generating");
+    try {
+      const { generateReportPDF, reportFilename } = await import("../../lib/pdf.js");
+      const pdf = await generateReportPDF({ report, site });
+      pdf.save(reportFilename(report, site));
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      // eslint-disable-next-line no-alert
+      alert("Couldn't generate PDF. Try again.");
+    } finally {
+      setPdfStatus("idle");
+    }
+  };
+
+  const sharePdf = async () => {
+    if (pdfStatus !== "idle") return;
+    setPdfStatus("generating");
+    try {
+      const { generateReportPDF, reportFilename } = await import("../../lib/pdf.js");
+      const pdf = await generateReportPDF({ report, site });
+      const filename = reportFilename(report, site);
+      const blob = pdf.output("blob");
+      const file = new File([blob], filename, { type: "application/pdf" });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+      } else {
+        pdf.save(filename);
+      }
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        console.error("PDF share failed:", err);
+        // eslint-disable-next-line no-alert
+        alert("Couldn't share PDF. Try downloading instead.");
+      }
+    } finally {
+      setPdfStatus("idle");
+    }
+  };
 
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
-      <button onClick={onBack} className="text-xs font-medium text-stone-600 hover:text-stone-900 flex items-center gap-1">
-        <ChevronLeft className="w-3.5 h-3.5" /> Back to reports
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={onBack} className="text-xs font-medium text-stone-600 hover:text-stone-900 flex items-center gap-1">
+          <ChevronLeft className="w-3.5 h-3.5" /> Back to reports
+        </button>
+        <div className="flex items-center gap-2">
+          {canShare && (
+            <button
+              onClick={sharePdf}
+              disabled={pdfStatus !== "idle"}
+              className="md:hidden text-xs font-medium px-3 py-2 rounded-md border border-stone-300 hover:bg-stone-50 text-stone-700 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {pdfStatus === "generating" ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Share2 className="w-3.5 h-3.5" />
+              )}
+              Share
+            </button>
+          )}
+          <button
+            onClick={downloadPdf}
+            disabled={pdfStatus !== "idle"}
+            className="text-xs font-medium px-3 py-2 rounded-md bg-stone-900 hover:bg-stone-800 text-white disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {pdfStatus === "generating" ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            <span className="hidden md:inline">Download </span>PDF
+          </button>
+        </div>
+      </div>
 
       <div className="bg-gradient-to-br from-stone-900 to-stone-800 text-white rounded-xl p-5 md:p-8 relative overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-30" />

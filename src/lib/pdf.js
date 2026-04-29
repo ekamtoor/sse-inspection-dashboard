@@ -1,0 +1,373 @@
+import { jsPDF } from "jspdf";
+import { SCHEMA } from "../data/schema.js";
+
+// A4 portrait, mm units. Designed to print or share via OS-level share sheet.
+const PAGE_W = 210;
+const PAGE_H = 297;
+const M = 14;
+const CONTENT_W = PAGE_W - M * 2;
+
+// Stone palette — keeps the PDF visually consistent with the in-app design.
+const COLOR = {
+  ink: [28, 25, 23],
+  muted: [120, 113, 108],
+  faint: [214, 211, 209],
+  surface: [250, 250, 249],
+  amber: [245, 158, 11],
+  red: [220, 38, 38],
+  redSoft: [254, 226, 226],
+  redInk: [127, 29, 29],
+  emerald: [16, 185, 129],
+  stone700: [68, 64, 60],
+};
+
+const SEVERITY_COLOR = {
+  critical: COLOR.red,
+  high: [234, 88, 12],
+  medium: COLOR.amber,
+  low: [120, 113, 108],
+};
+
+function setFill(pdf, [r, g, b]) {
+  pdf.setFillColor(r, g, b);
+}
+function setText(pdf, [r, g, b]) {
+  pdf.setTextColor(r, g, b);
+}
+function setDraw(pdf, [r, g, b]) {
+  pdf.setDrawColor(r, g, b);
+}
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`image load failed: ${url}`));
+    img.src = url;
+  });
+}
+
+// Resize to keep the embedded JPEG small — display size in the PDF is ~25mm,
+// so 600px is plenty of detail and cuts a 1600px source by ~7x in bytes.
+async function loadAsDataUrl(url, maxPx = 600) {
+  const img = await loadImage(url);
+  const longSide = Math.max(img.naturalWidth, img.naturalHeight);
+  const scale = longSide > maxPx ? maxPx / longSide : 1;
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+  return { dataUrl: canvas.toDataURL("image/jpeg", 0.82), w, h };
+}
+
+// Pre-fetch every photo before rendering so jspdf's sync addImage calls
+// have data ready. Failures are logged and skipped, not fatal.
+async function preloadPhotos(report) {
+  const out = {};
+  for (const f of report.fails) {
+    const list = report.photos?.[f.id] || [];
+    out[f.id] = [];
+    for (const p of list) {
+      if (!p?.url) continue;
+      try {
+        out[f.id].push(await loadAsDataUrl(p.url));
+      } catch (err) {
+        console.warn("Skipping photo in PDF:", err);
+      }
+    }
+  }
+  return out;
+}
+
+export async function generateReportPDF({ report, site }) {
+  const photoCache = await preloadPhotos(report);
+
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  let y = M;
+
+  const ensureSpace = (needed) => {
+    if (y + needed > PAGE_H - M - 8) {
+      pdf.addPage();
+      y = M;
+    }
+  };
+
+  // ---- Header band ----
+  setFill(pdf, COLOR.ink);
+  pdf.rect(0, 0, PAGE_W, 44, "F");
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(9);
+  setText(pdf, COLOR.amber);
+  pdf.text("PRE-INSPECTION REPORT", M, M + 2);
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(20);
+  setText(pdf, [255, 255, 255]);
+  pdf.text(site?.name || "Site", M, M + 11);
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(10);
+  setText(pdf, [180, 175, 170]);
+  const subtitle = [site?.city, site?.brand].filter(Boolean).join(" · ");
+  if (subtitle) pdf.text(subtitle, M, M + 17);
+
+  // Score / inspector / flags row
+  const completedDate = new Date(report.completedAt);
+  const dateStr = completedDate.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  const timeStr = completedDate.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  const labelY = M + 24;
+  const valueY = M + 30;
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(7);
+  setText(pdf, COLOR.amber);
+  pdf.text("SCORE", M, labelY);
+  pdf.text("INSPECTOR", M + 50, labelY);
+  pdf.text("FLAGS", M + 100, labelY);
+  pdf.text("COMPLETED", M + 130, labelY);
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(14);
+  setText(pdf, [255, 255, 255]);
+  pdf.text(`${report.score}/${report.total}`, M, valueY);
+  pdf.setFontSize(11);
+  pdf.text(report.inspector || "Inspector", M + 50, valueY);
+  pdf.setFontSize(14);
+  setText(
+    pdf,
+    report.fails.length > 0 ? COLOR.red : [120, 120, 120]
+  );
+  pdf.text(`${report.fails.length}`, M + 100, valueY);
+  pdf.setFontSize(10);
+  setText(pdf, [180, 175, 170]);
+  pdf.text(`${dateStr}\n${timeStr}`, M + 130, valueY - 2);
+
+  y = 52;
+
+  // ---- ZT violation banner ----
+  const ztFails = report.fails.filter((f) => {
+    const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
+    return sec?.zeroTolerance;
+  });
+  if (ztFails.length > 0) {
+    ensureSpace(18);
+    setFill(pdf, COLOR.redSoft);
+    setDraw(pdf, COLOR.red);
+    pdf.setLineWidth(0.4);
+    pdf.roundedRect(M, y, CONTENT_W, 14, 2, 2, "FD");
+    setText(pdf, COLOR.redInk);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(11);
+    pdf.text(
+      `${ztFails.length} Zero-Tolerance Violation${ztFails.length > 1 ? "s" : ""}`,
+      M + 4,
+      y + 6
+    );
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
+    pdf.text("Cure immediately or escalate to operator.", M + 4, y + 11);
+    y += 18;
+  }
+
+  // ---- By section ----
+  ensureSpace(12);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(12);
+  setText(pdf, COLOR.ink);
+  pdf.text("By Section", M, y + 4);
+  y += 8;
+
+  for (const sec of SCHEMA) {
+    const items = sec.items;
+    const earned = items.reduce((a, it) => a + (report.answers[it.id] === "pass" ? it.pts : 0), 0);
+    const total = items.reduce((a, it) => a + it.pts, 0);
+    const fails = items.filter((it) => report.answers[it.id] === "fail").length;
+    if (total === 0 && fails === 0) continue;
+
+    ensureSpace(11);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(9);
+    setText(pdf, COLOR.ink);
+    const labelText = sec.zeroTolerance ? `! ${sec.label}` : sec.label;
+    pdf.text(labelText, M, y + 3);
+
+    pdf.setFont("helvetica", "normal");
+    setText(pdf, COLOR.muted);
+    if (total > 0) {
+      const scoreText = `${earned}/${total}`;
+      const w = pdf.getTextWidth(scoreText);
+      pdf.text(scoreText, PAGE_W - M - w, y + 3);
+    }
+    if (fails > 0) {
+      const failText = `${fails} flag${fails > 1 ? "s" : ""}`;
+      const w = pdf.getTextWidth(failText);
+      const x = total > 0
+        ? PAGE_W - M - pdf.getTextWidth(`${earned}/${total}`) - w - 4
+        : PAGE_W - M - w;
+      setText(pdf, COLOR.red);
+      pdf.text(failText, x, y + 3);
+    }
+
+    if (total > 0) {
+      const barY = y + 5;
+      setFill(pdf, COLOR.faint);
+      pdf.rect(M, barY, CONTENT_W, 1.4, "F");
+      const filledColor = sec.zeroTolerance && fails > 0 ? COLOR.red : COLOR.stone700;
+      setFill(pdf, filledColor);
+      pdf.rect(M, barY, CONTENT_W * (earned / total), 1.4, "F");
+    }
+    y += 9;
+  }
+
+  y += 4;
+
+  // ---- Action items (fails) ----
+  ensureSpace(10);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(12);
+  setText(pdf, COLOR.ink);
+  pdf.text("Action Items", M, y + 4);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  setText(pdf, COLOR.muted);
+  pdf.text(
+    `${report.fails.length} flag${report.fails.length === 1 ? "" : "s"}`,
+    M + 28,
+    y + 4
+  );
+  y += 9;
+
+  if (report.fails.length === 0) {
+    ensureSpace(10);
+    setFill(pdf, COLOR.surface);
+    pdf.rect(M, y, CONTENT_W, 14, "F");
+    pdf.setFont("helvetica", "italic");
+    pdf.setFontSize(10);
+    setText(pdf, COLOR.muted);
+    pdf.text("All clear. No flags.", M + 4, y + 9);
+    y += 18;
+  }
+
+  for (const f of report.fails) {
+    const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
+    const photos = photoCache[f.id] || [];
+
+    // Compute height needed for this row
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(10);
+    const qLines = pdf.splitTextToSize(f.q, CONTENT_W - 4);
+    pdf.setFontSize(9);
+    const cLines = f.comment
+      ? pdf.splitTextToSize(f.comment, CONTENT_W - 4)
+      : [];
+
+    const photoRowH = photos.length > 0 ? 28 : 0;
+    const blockH = 6 + qLines.length * 4.6 + (cLines.length ? 2 + cLines.length * 4 : 0) + photoRowH + 3;
+
+    ensureSpace(blockH + 4);
+
+    // Row separator
+    setDraw(pdf, COLOR.faint);
+    pdf.setLineWidth(0.2);
+    pdf.line(M, y, PAGE_W - M, y);
+    y += 3;
+
+    // Top line: id + section label + severity pill
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7);
+    setText(pdf, COLOR.muted);
+    const meta = `${f.id}${sec?.label ? `  ·  ${sec.label.toUpperCase()}` : ""}`;
+    pdf.text(meta, M, y);
+
+    const sevColor = SEVERITY_COLOR[f.severity] || COLOR.muted;
+    const sevText = (f.severity || "info").toUpperCase();
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7);
+    const sevTextW = pdf.getTextWidth(sevText);
+    const pillPad = 2.2;
+    const pillW = sevTextW + pillPad * 2;
+    const pillH = 4.4;
+    const pillX = PAGE_W - M - pillW;
+    const pillY = y - 3.2;
+    setFill(pdf, sevColor);
+    pdf.roundedRect(pillX, pillY, pillW, pillH, 0.8, 0.8, "F");
+    setText(pdf, [255, 255, 255]);
+    pdf.text(sevText, pillX + pillPad, pillY + pillH - 1.4);
+
+    y += 4;
+
+    // Question text
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(10);
+    setText(pdf, COLOR.ink);
+    pdf.text(qLines, M, y + 3);
+    y += qLines.length * 4.6 + 1;
+
+    // Comment, italic
+    if (cLines.length > 0) {
+      pdf.setFont("helvetica", "italic");
+      pdf.setFontSize(9);
+      setText(pdf, COLOR.stone700);
+      pdf.text(cLines, M, y + 3);
+      y += cLines.length * 4 + 2;
+    }
+
+    // Photos row
+    if (photos.length > 0) {
+      const tileH = 24;
+      const tileMaxW = 32;
+      let cursorX = M;
+      const photoY = y + 1;
+      for (const p of photos) {
+        const aspect = p.w / p.h;
+        const tw = Math.min(tileMaxW, tileH * aspect);
+        if (cursorX + tw > PAGE_W - M) break; // single row; extras silently dropped
+        try {
+          pdf.addImage(p.dataUrl, "JPEG", cursorX, photoY, tw, tileH, undefined, "FAST");
+        } catch (err) {
+          console.warn("Skipping photo embed:", err);
+        }
+        cursorX += tw + 2;
+      }
+      y += tileH + 3;
+    }
+
+    y += 1;
+  }
+
+  // ---- Footer page numbers ----
+  const pageCount = pdf.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    pdf.setPage(i);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    setText(pdf, COLOR.muted);
+    pdf.text(
+      `Vanguard · ${site?.name || ""} · ${dateStr}`,
+      M,
+      PAGE_H - 6
+    );
+    const right = `Page ${i} of ${pageCount}`;
+    pdf.text(right, PAGE_W - M - pdf.getTextWidth(right), PAGE_H - 6);
+  }
+
+  return pdf;
+}
+
+export function reportFilename(report, site) {
+  const dt = new Date(report.completedAt);
+  const ymd = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  const safe = (site?.name || "Report").replace(/[^a-zA-Z0-9-]+/g, "-").replace(/^-|-$/g, "");
+  return `Vanguard-${safe}-${ymd}.pdf`;
+}
