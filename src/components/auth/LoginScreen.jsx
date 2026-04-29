@@ -4,24 +4,53 @@ import { supabase } from "../../lib/supabase.js";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState("email");
   const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState(null);
 
-  async function submit(e) {
+  async function sendCode(e) {
     e.preventDefault();
     if (!email.trim()) return;
     setStatus("sending");
     setErrorMsg(null);
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: window.location.origin, shouldCreateUser: true },
     });
     if (error) {
       setErrorMsg(error.message);
       setStatus("idle");
       return;
     }
-    setStatus("sent");
+    setStep("code");
+    setStatus("idle");
+  }
+
+  async function verifyCode(e) {
+    e.preventDefault();
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setStatus("verifying");
+    setErrorMsg(null);
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: trimmed,
+      type: "email",
+    });
+    if (error) {
+      setErrorMsg(error.message);
+      setStatus("idle");
+      return;
+    }
+    // Auth state change listener in App.jsx will pick up the session.
+  }
+
+  function reset() {
+    setStep("email");
+    setCode("");
+    setErrorMsg(null);
+    setStatus("idle");
   }
 
   return (
@@ -40,31 +69,11 @@ export default function LoginScreen() {
         </div>
 
         <div className="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
-          {status === "sent" ? (
-            <div className="text-center py-4">
-              <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Mail className="w-6 h-6 text-emerald-600" />
-              </div>
-              <h2 className="font-display text-lg font-semibold mb-2">Check your email</h2>
-              <p className="text-sm text-stone-600 leading-relaxed">
-                We sent a sign-in link to <span className="font-medium">{email}</span>. Open it on
-                this device to log in. The link is valid for 60 minutes.
-              </p>
-              <button
-                onClick={() => {
-                  setStatus("idle");
-                  setEmail("");
-                }}
-                className="text-xs text-stone-500 hover:text-stone-900 mt-6"
-              >
-                Use a different email
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={submit}>
+          {step === "email" ? (
+            <form onSubmit={sendCode}>
               <h2 className="font-display text-lg font-semibold mb-1">Sign in</h2>
               <p className="text-sm text-stone-500 mb-5">
-                Enter your email and we'll send a one-time sign-in link.
+                Enter your email and we'll send a one-time code.
               </p>
               <label className="block">
                 <span className="text-xs font-medium text-stone-600 uppercase tracking-wide">
@@ -95,11 +104,72 @@ export default function LoginScreen() {
                 {status === "sending" ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Sending link…
+                    Sending code…
                   </>
                 ) : (
-                  "Send sign-in link"
+                  "Send code"
                 )}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={verifyCode}>
+              <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Mail className="w-6 h-6 text-emerald-600" />
+              </div>
+              <h2 className="font-display text-lg font-semibold mb-1 text-center">
+                Check your email
+              </h2>
+              <p className="text-sm text-stone-600 leading-relaxed text-center mb-5">
+                We sent a 6-digit code to{" "}
+                <span className="font-medium">{email}</span>. Enter it below — or just tap the link
+                in the email if it opens in this browser.
+              </p>
+              <label className="block">
+                <span className="text-xs font-medium text-stone-600 uppercase tracking-wide">
+                  6-digit code
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
+                  required
+                  autoFocus
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
+                  className="mt-1 w-full border border-stone-300 rounded-md px-3 py-2 text-center text-lg tracking-[0.4em] font-mono focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400"
+                />
+              </label>
+
+              {errorMsg && (
+                <div className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                  {errorMsg}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={status === "verifying" || code.length < 6}
+                className="mt-5 w-full bg-stone-900 hover:bg-stone-800 disabled:bg-stone-300 text-white text-sm font-medium px-4 py-2.5 rounded-md flex items-center justify-center gap-2"
+              >
+                {status === "verifying" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Verifying…
+                  </>
+                ) : (
+                  "Verify and sign in"
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={reset}
+                className="block mx-auto text-xs text-stone-500 hover:text-stone-900 mt-4"
+              >
+                Use a different email
               </button>
             </form>
           )}
