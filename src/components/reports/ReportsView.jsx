@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { FileText, ShieldAlert, Filter, X } from "lucide-react";
+import { FileText, ShieldAlert, Filter, X, Trash2 } from "lucide-react";
 import { SCHEMA } from "../../data/schema.js";
 import ReportDetail from "./ReportDetail.jsx";
 
-export default function ReportsView({ reports, sites, detail, setDetail }) {
-  if (detail) return <ReportDetail report={detail} sites={sites} onBack={() => setDetail(null)} />;
+export default function ReportsView({ reports, sites, detail, setDetail, onDelete }) {
+  if (detail) return <ReportDetail report={detail} sites={sites} onBack={() => setDetail(null)} onDelete={onDelete} />;
 
   const [siteFilter, setSiteFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
@@ -118,16 +118,16 @@ export default function ReportsView({ reports, sites, detail, setDetail }) {
                 SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id))
               );
               return (
-                <tr key={r.id} className="hover:bg-stone-50 cursor-pointer" onClick={() => setDetail(r)}>
-                  <td className="px-6 py-4 font-mono text-xs">{new Date(r.completedAt).toLocaleDateString()}</td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium">{site?.name}</div>
+                <tr key={r.id} className="hover:bg-stone-50 group">
+                  <td className="px-6 py-4 font-mono text-xs cursor-pointer" onClick={() => setDetail(r)}>{new Date(r.completedAt).toLocaleDateString()}</td>
+                  <td className="px-6 py-4 cursor-pointer" onClick={() => setDetail(r)}>
+                    <div className="text-sm font-medium">{site?.name || <span className="italic text-stone-400">site removed</span>}</div>
                     <div className="text-xs text-stone-500">{site?.city}</div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 cursor-pointer" onClick={() => setDetail(r)}>
                     <div className="font-mono text-base font-semibold">{r.score}<span className="text-stone-400 text-xs">/{r.total}</span></div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 cursor-pointer" onClick={() => setDetail(r)}>
                     <div className="flex items-center gap-2">
                       <span className={`font-mono text-sm ${r.fails.length > 0 ? "text-red-600 font-semibold" : "text-stone-400"}`}>
                         {r.fails.length}
@@ -139,9 +139,25 @@ export default function ReportsView({ reports, sites, detail, setDetail }) {
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-stone-700">{r.inspector || "—"}</td>
+                  <td className="px-6 py-4 text-sm text-stone-700 cursor-pointer" onClick={() => setDetail(r)}>{r.inspector || "—"}</td>
                   <td className="px-6 py-4 text-right">
-                    <span className="text-xs font-medium text-stone-900 hover:underline">Open →</span>
+                    <div className="flex items-center justify-end gap-2">
+                      {onDelete && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onDelete(r); }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-red-100 rounded text-stone-400 hover:text-red-600"
+                          title="Delete report"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setDetail(r)}
+                        className="text-xs font-medium text-stone-900 hover:underline"
+                      >
+                        Open →
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -166,32 +182,47 @@ export default function ReportsView({ reports, sites, detail, setDetail }) {
             SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id))
           );
           return (
-            <button
+            <div
               key={r.id}
-              onClick={() => setDetail(r)}
-              className="w-full bg-white border border-stone-200 rounded-xl p-4 text-left hover:bg-stone-50"
+              className="relative w-full bg-white border border-stone-200 rounded-xl p-4 hover:bg-stone-50"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-mono text-stone-500">{new Date(r.completedAt).toLocaleDateString()}</div>
-                  <div className="text-sm font-medium mt-0.5 truncate">{site?.name}</div>
-                  <div className="text-xs text-stone-500 truncate">{r.inspector || "—"}</div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="font-mono text-xl font-semibold">{r.score}<span className="text-stone-400 text-sm">/{r.total}</span></div>
-                  <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                    <span className={`font-mono text-xs ${r.fails.length > 0 ? "text-red-600 font-semibold" : "text-stone-400"}`}>
-                      {r.fails.length} flag{r.fails.length === 1 ? "" : "s"}
-                    </span>
-                    {ztFails.length > 0 && (
-                      <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold">
-                        {ztFails.length} ZT
+              <button
+                onClick={() => setDetail(r)}
+                className="w-full text-left"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1 pr-8">
+                    <div className="text-xs font-mono text-stone-500">{new Date(r.completedAt).toLocaleDateString()}</div>
+                    <div className="text-sm font-medium mt-0.5 truncate">
+                      {site?.name || <span className="italic text-stone-400">site removed</span>}
+                    </div>
+                    <div className="text-xs text-stone-500 truncate">{r.inspector || "—"}</div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="font-mono text-xl font-semibold">{r.score}<span className="text-stone-400 text-sm">/{r.total}</span></div>
+                    <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                      <span className={`font-mono text-xs ${r.fails.length > 0 ? "text-red-600 font-semibold" : "text-stone-400"}`}>
+                        {r.fails.length} flag{r.fails.length === 1 ? "" : "s"}
                       </span>
-                    )}
+                      {ztFails.length > 0 && (
+                        <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold">
+                          {ztFails.length} ZT
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </button>
+              </button>
+              {onDelete && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(r); }}
+                  className="absolute top-3 right-3 p-2 rounded-md text-stone-400 hover:text-red-600 hover:bg-red-50"
+                  title="Delete report"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           );
         })}
         {filtered.length === 0 && (

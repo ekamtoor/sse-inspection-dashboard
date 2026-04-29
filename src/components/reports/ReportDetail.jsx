@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { ChevronLeft, ShieldAlert, Download, Share2, Loader2 } from "lucide-react";
+import { ChevronLeft, ShieldAlert, Download, Share2, Loader2, Trash2 } from "lucide-react";
 import { SCHEMA } from "../../data/schema.js";
 import PriorityPill from "../shared/PriorityPill.jsx";
 
-export default function ReportDetail({ report, sites, onBack }) {
+export default function ReportDetail({ report, sites, onBack, onDelete }) {
   const site = sites.find((s) => s.id === report.siteId);
   const ztFails = report.fails.filter((f) => SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id)));
   const [pdfStatus, setPdfStatus] = useState("idle");
@@ -86,6 +86,16 @@ export default function ReportDetail({ report, sites, onBack }) {
             )}
             <span className="hidden md:inline">Download </span>PDF
           </button>
+          {onDelete && (
+            <button
+              onClick={() => onDelete(report)}
+              className="text-xs font-medium px-2 md:px-3 py-2 rounded-md border border-stone-300 text-stone-600 hover:text-red-600 hover:border-red-300 hover:bg-red-50 flex items-center gap-1.5"
+              title="Delete report"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Delete</span>
+            </button>
+          )}
         </div>
       </div>
 

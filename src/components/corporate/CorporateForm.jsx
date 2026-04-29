@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { X, Plus, Trash2, FileText, Loader2, Upload } from "lucide-react";
 import Field from "../shared/Field.jsx";
+import { uploadFile, deleteFile } from "../../lib/photos.js";
 
-export default function CorporateForm({ sites, onSubmit, onClose }) {
+export default function CorporateForm({ sites, onSubmit, onClose, user }) {
+  const corpIdRef = useRef(`CORP-${Date.now()}`);
+  const fileRef = useRef();
   const [form, setForm] = useState({
     siteId: sites[0]?.id || "",
     date: new Date().toISOString().slice(0, 10),
@@ -13,12 +16,37 @@ export default function CorporateForm({ sites, onSubmit, onClose }) {
     notes: "",
     sections: [{ label: "", earned: "", total: "" }],
     cures: [],
+    pdf: null,
   });
   const [newCure, setNewCure] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("idle");
+  const [uploadError, setUploadError] = useState(null);
+
+  const handleFile = async (file) => {
+    if (!file || !user) return;
+    setUploadStatus("uploading");
+    setUploadError(null);
+    try {
+      const result = await uploadFile(user.id, `corporate/${corpIdRef.current}`, file);
+      setForm((f) => ({ ...f, pdf: result }));
+      setUploadStatus("idle");
+    } catch (err) {
+      console.error("PDF upload failed:", err);
+      setUploadError(err?.message || "Upload failed");
+      setUploadStatus("idle");
+    }
+  };
+
+  const removePdf = () => {
+    if (form.pdf?.path) deleteFile(form.pdf.path);
+    setForm((f) => ({ ...f, pdf: null }));
+  };
 
   const submit = () => {
     if (!form.siteId || !form.score) return;
+    if (uploadStatus !== "idle") return;
     onSubmit({
+      id: corpIdRef.current,
       ...form,
       score: parseInt(form.score),
       total: parseInt(form.total),
@@ -28,10 +56,16 @@ export default function CorporateForm({ sites, onSubmit, onClose }) {
     });
   };
 
+  const cancelAndClose = () => {
+    // If an uploaded PDF was attached but the user bails out, clean it up.
+    if (form.pdf?.path) deleteFile(form.pdf.path);
+    onClose();
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:bg-stone-900/40 md:p-4"
-      onClick={onClose}
+      onClick={cancelAndClose}
     >
       <div
         className="bg-white w-full max-w-full md:max-w-2xl shadow-2xl md:my-8 max-h-[95vh] md:max-h-[90vh] flex flex-col rounded-t-2xl md:rounded-xl animate-slide-up md:animate-slide"
@@ -46,12 +80,79 @@ export default function CorporateForm({ sites, onSubmit, onClose }) {
             <h3 className="font-display text-lg md:text-xl font-semibold">Add Corporate Report</h3>
             <p className="text-xs text-stone-500 mt-0.5">Archive a quarterly mystery-shop result</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded">
+          <button onClick={cancelAndClose} className="p-1 hover:bg-stone-100 rounded">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="px-5 md:px-6 py-5 space-y-5 flex-1 overflow-y-auto">
+          {/* PDF upload — primary surface */}
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-stone-500 font-medium mb-3">
+              Corporate-issued PDF
+            </div>
+            {form.pdf ? (
+              <div className="flex items-center gap-3 bg-stone-50 border border-stone-200 rounded-md px-3 py-3">
+                <div className="w-9 h-9 bg-stone-900 rounded-md flex items-center justify-center text-white flex-shrink-0">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{form.pdf.name}</div>
+                  <a
+                    href={form.pdf.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-stone-500 hover:text-stone-900 underline"
+                  >
+                    Open uploaded PDF
+                  </a>
+                </div>
+                <button
+                  onClick={removePdf}
+                  className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-md flex-shrink-0"
+                  title="Remove PDF"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploadStatus === "uploading" || !user}
+                className="w-full border-2 border-dashed border-stone-300 hover:border-stone-500 hover:bg-stone-50 rounded-md px-4 py-6 flex flex-col items-center justify-center gap-2 text-stone-500 disabled:opacity-50"
+              >
+                {uploadStatus === "uploading" ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-xs">Uploading…</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5" />
+                    <span className="text-sm font-medium text-stone-700">Upload corporate PDF</span>
+                    <span className="text-[11px] text-stone-500">PDF only · stays attached to this report</span>
+                  </>
+                )}
+              </button>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+                e.target.value = "";
+              }}
+            />
+            {uploadError && (
+              <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                {uploadError}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
             <Field label="Site" required>
               <select value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })}
@@ -192,8 +293,12 @@ export default function CorporateForm({ sites, onSubmit, onClose }) {
         </div>
 
         <div className="px-5 md:px-6 py-4 border-t border-stone-200 flex items-center justify-end gap-2 flex-shrink-0">
-          <button onClick={onClose} className="text-stone-500 hover:text-stone-900 text-sm px-4 py-2 rounded-md">Cancel</button>
-          <button onClick={submit} className="bg-stone-900 hover:bg-stone-800 text-white text-sm font-medium px-4 py-2 rounded-md">
+          <button onClick={cancelAndClose} className="text-stone-500 hover:text-stone-900 text-sm px-4 py-2 rounded-md">Cancel</button>
+          <button
+            onClick={submit}
+            disabled={uploadStatus === "uploading"}
+            className="bg-stone-900 hover:bg-stone-800 disabled:bg-stone-300 text-white text-sm font-medium px-4 py-2 rounded-md"
+          >
             Archive report
           </button>
         </div>

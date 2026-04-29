@@ -1,6 +1,6 @@
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, FileText, Trash2 } from "lucide-react";
 
-export default function CorporateDetail({ corp, sites, completed, onBack }) {
+export default function CorporateDetail({ corp, sites, completed, onBack, onDelete }) {
   const site = sites.find((s) => s.id === corp.siteId);
   const corpDate = new Date(corp.date);
   const matching = completed
@@ -18,9 +18,35 @@ export default function CorporateDetail({ corp, sites, completed, onBack }) {
 
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
-      <button onClick={onBack} className="text-xs font-medium text-stone-600 hover:text-stone-900 flex items-center gap-1">
-        <ChevronLeft className="w-3.5 h-3.5" /> Back to archive
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={onBack} className="text-xs font-medium text-stone-600 hover:text-stone-900 flex items-center gap-1">
+          <ChevronLeft className="w-3.5 h-3.5" /> Back to archive
+        </button>
+        <div className="flex items-center gap-2">
+          {corp.pdf?.url && (
+            <a
+              href={corp.pdf.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium px-3 py-2 rounded-md bg-stone-900 hover:bg-stone-800 text-white flex items-center gap-1.5"
+              title={corp.pdf.name || "View PDF"}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">View </span>PDF
+            </a>
+          )}
+          {onDelete && (
+            <button
+              onClick={() => onDelete(corp)}
+              className="text-xs font-medium px-2 md:px-3 py-2 rounded-md border border-stone-300 text-stone-600 hover:text-red-600 hover:border-red-300 hover:bg-red-50 flex items-center gap-1.5"
+              title="Delete corporate report"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Delete</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       <div className="bg-gradient-to-br from-stone-900 to-stone-800 text-white rounded-xl p-5 md:p-8 relative overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-30" />

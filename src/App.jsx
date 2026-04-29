@@ -422,10 +422,32 @@ function AppShell({ user }) {
   };
 
   const addCorporate = (form) => {
-    const entry = { id: `CORP-${Date.now()}`, ...form };
+    const entry = { id: form.id || `CORP-${Date.now()}`, ...form };
     setCorporate((prev) => [entry, ...(prev || [])]);
     setShowCorpForm(false);
     toast("Corporate report archived.");
+  };
+
+  const deleteReport = (reportId) => {
+    const target = (completed || []).find((r) => r.id === reportId);
+    if (target?.photos) {
+      for (const list of Object.values(target.photos)) {
+        for (const p of list || []) {
+          if (p?.path) deletePhoto(p.path);
+        }
+      }
+    }
+    setCompleted((prev) => (prev || []).filter((r) => r.id !== reportId));
+    if (reportDetail?.id === reportId) setReportDetail(null);
+    toast("Report deleted.");
+  };
+
+  const deleteCorporate = (corpId) => {
+    const target = (corporate || []).find((c) => c.id === corpId);
+    if (target?.pdf?.path) deletePhoto(target.pdf.path);
+    setCorporate((prev) => (prev || []).filter((c) => c.id !== corpId));
+    if (corpDetail?.id === corpId) setCorpDetail(null);
+    toast("Corporate report deleted.");
   };
 
   const saveInspector = (entry) => {
@@ -609,6 +631,14 @@ function AppShell({ user }) {
               sites={sitesEnriched}
               detail={reportDetail}
               setDetail={setReportDetail}
+              onDelete={(r) =>
+                setConfirmDialog({
+                  title: "Delete this report?",
+                  message: "Removes the report and any photos attached to it from cloud storage. Cannot be undone.",
+                  confirmLabel: "Delete",
+                  onConfirm: () => deleteReport(r.id),
+                })
+              }
             />
           )}
 
@@ -620,6 +650,14 @@ function AppShell({ user }) {
               detail={corpDetail}
               setDetail={setCorpDetail}
               onAdd={() => setShowCorpForm(true)}
+              onDelete={(c) =>
+                setConfirmDialog({
+                  title: "Delete this corporate report?",
+                  message: "Removes the archived entry and the attached PDF, if any. Cannot be undone.",
+                  confirmLabel: "Delete",
+                  onConfirm: () => deleteCorporate(c.id),
+                })
+              }
             />
           )}
 
@@ -676,7 +714,7 @@ function AppShell({ user }) {
       )}
 
       {showCorpForm && (
-        <CorporateForm sites={sitesEnriched} onSubmit={addCorporate} onClose={() => setShowCorpForm(false)} />
+        <CorporateForm sites={sitesEnriched} onSubmit={addCorporate} onClose={() => setShowCorpForm(false)} user={user} />
       )}
 
       {showInspectorForm && (

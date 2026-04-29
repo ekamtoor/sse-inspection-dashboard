@@ -79,3 +79,22 @@ export async function deletePhoto(path) {
     // Best-effort cleanup; orphaned objects can be swept later.
   }
 }
+
+// Generic upload — used for things that aren't camera shots (e.g. corporate
+// PDF reports). Skips the canvas resize since it'd corrupt non-image bytes.
+// Caller passes a subpath which is appended after the user id; RLS still
+// pins the first folder segment to auth.uid().
+export async function uploadFile(userId, subpath, file) {
+  const safeSub = String(subpath || "").replace(/^\/+|\/+$/g, "") || "uploads";
+  const path = `${userId}/${safeSub}/${uniqueName(file.name)}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    contentType: file.type || "application/octet-stream",
+    cacheControl: "31536000",
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  return { url: data.publicUrl, path, name: file.name };
+}
+
+export const deleteFile = deletePhoto;

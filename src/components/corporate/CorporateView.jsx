@@ -1,9 +1,17 @@
-import { Plus, Archive } from "lucide-react";
+import { Plus, Archive, FileText, Trash2 } from "lucide-react";
 import CorporateDetail from "./CorporateDetail.jsx";
 
-export default function CorporateView({ corporate, sites, completed, detail, setDetail, onAdd }) {
+export default function CorporateView({ corporate, sites, completed, detail, setDetail, onAdd, onDelete }) {
   if (detail) {
-    return <CorporateDetail corp={detail} sites={sites} completed={completed} onBack={() => setDetail(null)} />;
+    return (
+      <CorporateDetail
+        corp={detail}
+        sites={sites}
+        completed={completed}
+        onBack={() => setDetail(null)}
+        onDelete={onDelete}
+      />
+    );
   }
 
   const sorted = corporate.slice().sort((a, b) => b.date.localeCompare(a.date));
@@ -27,35 +35,57 @@ export default function CorporateView({ corporate, sites, completed, detail, set
           const site = sites.find((s) => s.id === c.siteId);
           const isMarathon = c.brand.includes("Marathon") || c.brand.includes("ARCO");
           return (
-            <button
+            <div
               key={c.id}
-              onClick={() => setDetail(c)}
-              className="bg-white border border-stone-200 rounded-xl p-4 md:p-5 hover:shadow-sm transition-shadow text-left"
+              className="relative bg-white border border-stone-200 rounded-xl p-4 md:p-5 hover:shadow-sm transition-shadow group"
             >
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className={`text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded ${
-                      isMarathon ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800"
-                    }`}>
-                      {c.brand}
-                    </span>
-                    <span className="font-mono text-[10px] text-stone-500">{c.date}</span>
+              <button
+                onClick={() => setDetail(c)}
+                className="absolute inset-0 rounded-xl"
+                aria-label="Open report"
+              />
+              <div className="relative pointer-events-none">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0 flex-1 pr-9">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className={`text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded ${
+                        isMarathon ? "bg-blue-100 text-blue-800" : "bg-amber-100 text-amber-800"
+                      }`}>
+                        {c.brand}
+                      </span>
+                      <span className="font-mono text-[10px] text-stone-500">{c.date}</span>
+                      {c.pdf?.url && (
+                        <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 bg-stone-100 text-stone-700 rounded flex items-center gap-1">
+                          <FileText className="w-3 h-3" /> PDF
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-display text-base md:text-lg font-semibold leading-tight truncate">
+                      {site?.name || <span className="italic text-stone-400">Site removed</span>}
+                    </h3>
+                    <p className="text-xs text-stone-500 mt-0.5 truncate">{site?.city}</p>
                   </div>
-                  <h3 className="font-display text-base md:text-lg font-semibold leading-tight truncate">{site?.name}</h3>
-                  <p className="text-xs text-stone-500 mt-0.5 truncate">{site?.city}</p>
+                  <div className="text-right flex-shrink-0">
+                    <div className="font-mono text-2xl font-semibold">{c.score}</div>
+                    <div className="font-mono text-xs text-stone-400">/{c.total}</div>
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="font-mono text-2xl font-semibold">{c.score}</div>
-                  <div className="font-mono text-xs text-stone-400">/{c.total}</div>
-                </div>
+                {c.cures && c.cures.length > 0 && (
+                  <div className="text-xs text-amber-700 font-medium pt-3 border-t border-stone-100">
+                    ⚠ {c.cures.length} cure{c.cures.length === 1 ? "" : "s"} pending
+                  </div>
+                )}
               </div>
-              {c.cures && c.cures.length > 0 && (
-                <div className="text-xs text-amber-700 font-medium pt-3 border-t border-stone-100">
-                  ⚠ {c.cures.length} cure{c.cures.length === 1 ? "" : "s"} pending
-                </div>
+              {onDelete && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(c); }}
+                  className="absolute top-3 right-3 p-2 rounded-md text-stone-400 hover:text-red-600 hover:bg-red-50 z-10"
+                  title="Delete report"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               )}
-            </button>
+            </div>
           );
         })}
         {sorted.length === 0 && (
