@@ -66,9 +66,9 @@ function AppShell({ user }) {
   const [corporate, setCorporate]             = useUserDataKey("corporate");
   const [internalAudits, setInternalAudits]   = useUserDataKey("internal_audits");
 
-  const [view, setView] = useState("dashboard");
-  const [activeInspection, setActiveInspection] = useState(null);
-  const [activeInternal,   setActiveInternal]   = useState(null);
+  const [view, setViewRaw] = useUserDataKey("view");
+  const [activeInspection, setActiveInspection] = useUserDataKey("active_inspection");
+  const [activeInternal,   setActiveInternal]   = useUserDataKey("active_internal");
   const [issueDetail,  setIssueDetail]  = useState(null);
   const [reportDetail, setReportDetail] = useState(null);
   const [corpDetail,   setCorpDetail]   = useState(null);
@@ -87,7 +87,7 @@ function AppShell({ user }) {
   };
 
   const navigate = (v) => {
-    setView(v);
+    setViewRaw(v);
     setMoreOpen(false);
     setSiteDetailId(null);
   };
