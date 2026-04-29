@@ -21,13 +21,6 @@ const COLOR = {
   stone700: [68, 64, 60],
 };
 
-const SEVERITY_COLOR = {
-  critical: COLOR.red,
-  high: [234, 88, 12],
-  medium: COLOR.amber,
-  low: [120, 113, 108],
-};
-
 function setFill(pdf, [r, g, b]) {
   pdf.setFillColor(r, g, b);
 }
@@ -67,13 +60,16 @@ async function loadAsDataUrl(url, maxPx = 600) {
 // have data ready. Failures are logged and skipped, not fatal.
 async function preloadPhotos(report) {
   const out = {};
-  for (const f of report.fails) {
-    const list = report.photos?.[f.id] || [];
-    out[f.id] = [];
+  const photoMap = report.photos || {};
+  const ids = Object.keys(photoMap);
+  for (const id of ids) {
+    const list = photoMap[id] || [];
+    if (list.length === 0) continue;
+    out[id] = [];
     for (const p of list) {
       if (!p?.url) continue;
       try {
-        out[f.id].push(await loadAsDataUrl(p.url));
+        out[id].push(await loadAsDataUrl(p.url));
       } catch (err) {
         console.warn("Skipping photo in PDF:", err);
       }
@@ -230,120 +226,153 @@ export async function generateReportPDF({ report, site }) {
     y += 9;
   }
 
-  y += 4;
+  y += 6;
 
-  // ---- Action items (fails) ----
+  // ---- Full inspection log ----
   ensureSpace(10);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
   setText(pdf, COLOR.ink);
-  pdf.text("Action Items", M, y + 4);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(8);
-  setText(pdf, COLOR.muted);
-  pdf.text(
-    `${report.fails.length} flag${report.fails.length === 1 ? "" : "s"}`,
-    M + 28,
-    y + 4
-  );
+  pdf.text("Full Inspection", M, y + 4);
   y += 9;
 
-  if (report.fails.length === 0) {
-    ensureSpace(10);
-    setFill(pdf, COLOR.surface);
-    pdf.rect(M, y, CONTENT_W, 14, "F");
-    pdf.setFont("helvetica", "italic");
+  const ID_COL_W = 14;
+  const STATUS_W = 14;
+  const Q_COL_X = M + ID_COL_W;
+  const Q_COL_W = CONTENT_W - ID_COL_W - STATUS_W - 2;
+  const ROW_PAD_Y = 2.2;
+
+  for (const sec of SCHEMA) {
+    const items = sec.items;
+    if (!items || items.length === 0) continue;
+    const earned = items.reduce((a, it) => a + (report.answers[it.id] === "pass" ? it.pts : 0), 0);
+    const total = items.reduce((a, it) => a + it.pts, 0);
+    const fails = items.filter((it) => report.answers[it.id] === "fail").length;
+
+    // Section header band
+    ensureSpace(11);
+    setFill(pdf, sec.zeroTolerance ? COLOR.redSoft : COLOR.surface);
+    pdf.rect(M, y, CONTENT_W, 7.6, "F");
+    pdf.setFont("helvetica", "bold");
     pdf.setFontSize(10);
-    setText(pdf, COLOR.muted);
-    pdf.text("All clear. No flags.", M + 4, y + 9);
-    y += 18;
-  }
+    setText(pdf, sec.zeroTolerance ? COLOR.redInk : COLOR.ink);
+    const header = sec.zeroTolerance ? `! ${sec.label}` : sec.label;
+    pdf.text(header, M + 2, y + 5);
 
-  for (const f of report.fails) {
-    const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
-    const photos = photoCache[f.id] || [];
-
-    // Compute height needed for this row
     pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(10);
-    const qLines = pdf.splitTextToSize(f.q, CONTENT_W - 4);
-    pdf.setFontSize(9);
-    const cLines = f.comment
-      ? pdf.splitTextToSize(f.comment, CONTENT_W - 4)
-      : [];
-
-    const photoRowH = photos.length > 0 ? 28 : 0;
-    const blockH = 6 + qLines.length * 4.6 + (cLines.length ? 2 + cLines.length * 4 : 0) + photoRowH + 3;
-
-    ensureSpace(blockH + 4);
-
-    // Row separator
-    setDraw(pdf, COLOR.faint);
-    pdf.setLineWidth(0.2);
-    pdf.line(M, y, PAGE_W - M, y);
-    y += 3;
-
-    // Top line: id + section label + severity pill
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7);
+    pdf.setFontSize(8);
     setText(pdf, COLOR.muted);
-    const meta = `${f.id}${sec?.label ? `  ·  ${sec.label.toUpperCase()}` : ""}`;
-    pdf.text(meta, M, y);
+    let metaRight = "";
+    if (total > 0) metaRight = `${earned}/${total}`;
+    if (fails > 0) metaRight = metaRight ? `${fails} flag${fails > 1 ? "s" : ""}  ·  ${metaRight}` : `${fails} flag${fails > 1 ? "s" : ""}`;
+    if (metaRight) {
+      const w = pdf.getTextWidth(metaRight);
+      pdf.text(metaRight, PAGE_W - M - 2 - w, y + 5);
+    }
+    y += 9;
 
-    const sevColor = SEVERITY_COLOR[f.severity] || COLOR.muted;
-    const sevText = (f.severity || "info").toUpperCase();
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7);
-    const sevTextW = pdf.getTextWidth(sevText);
-    const pillPad = 2.2;
-    const pillW = sevTextW + pillPad * 2;
-    const pillH = 4.4;
-    const pillX = PAGE_W - M - pillW;
-    const pillY = y - 3.2;
-    setFill(pdf, sevColor);
-    pdf.roundedRect(pillX, pillY, pillW, pillH, 0.8, 0.8, "F");
-    setText(pdf, [255, 255, 255]);
-    pdf.text(sevText, pillX + pillPad, pillY + pillH - 1.4);
+    // Each item in section
+    for (let idx = 0; idx < items.length; idx++) {
+      const it = items[idx];
+      const ans = report.answers[it.id];
+      const comment = report.comments?.[it.id] || "";
+      const photos = photoCache[it.id] || [];
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9.5);
+      const qLines = pdf.splitTextToSize(it.q, Q_COL_W);
+      pdf.setFontSize(9);
+      const cLines = comment ? pdf.splitTextToSize(comment, Q_COL_W) : [];
+
+      const tileH = 22;
+      const photoBlockH = photos.length > 0 ? tileH + 3 : 0;
+      const baseH =
+        ROW_PAD_Y * 2 + qLines.length * 4.4 +
+        (cLines.length > 0 ? cLines.length * 4 + 2 : 0) +
+        photoBlockH;
+
+      ensureSpace(baseH + 1);
+
+      // ID column
+      pdf.setFont("courier", "bold");
+      pdf.setFontSize(8);
+      setText(pdf, COLOR.muted);
+      pdf.text(it.id, M, y + ROW_PAD_Y + 3);
+
+      // Question
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9.5);
+      setText(pdf, COLOR.ink);
+      pdf.text(qLines, Q_COL_X, y + ROW_PAD_Y + 3);
+
+      // Status pill on the right
+      const statusInfo = ans === "pass"
+        ? { label: "PASS", fill: COLOR.emerald, color: [255, 255, 255] }
+        : ans === "fail"
+          ? { label: "FAIL", fill: COLOR.red, color: [255, 255, 255] }
+          : { label: "—", fill: null, color: COLOR.muted };
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7);
+      const sw = pdf.getTextWidth(statusInfo.label);
+      const pillPad = 2.2;
+      const pillW = sw + pillPad * 2;
+      const pillH = 4.4;
+      const pillX = PAGE_W - M - pillW;
+      const pillY = y + ROW_PAD_Y;
+      if (statusInfo.fill) {
+        setFill(pdf, statusInfo.fill);
+        pdf.roundedRect(pillX, pillY, pillW, pillH, 0.8, 0.8, "F");
+      }
+      setText(pdf, statusInfo.color);
+      pdf.text(statusInfo.label, pillX + pillPad, pillY + pillH - 1.3);
+
+      let cursorY = y + ROW_PAD_Y + qLines.length * 4.4 + 1;
+
+      // Comment
+      if (cLines.length > 0) {
+        pdf.setFont("helvetica", "italic");
+        pdf.setFontSize(9);
+        setText(pdf, COLOR.stone700);
+        pdf.text(cLines, Q_COL_X, cursorY + 3);
+        cursorY += cLines.length * 4 + 2;
+      }
+
+      // Photos
+      if (photos.length > 0) {
+        const tileMaxW = 30;
+        let cursorX = Q_COL_X;
+        const photoY = cursorY + 1;
+        const rowMaxX = PAGE_W - M;
+        for (const p of photos) {
+          const aspect = p.w / p.h;
+          const tw = Math.min(tileMaxW, tileH * aspect);
+          if (cursorX + tw > rowMaxX) {
+            cursorX = Q_COL_X;
+            cursorY = photoY + tileH + 2;
+            ensureSpace(tileH + 4);
+          }
+          try {
+            pdf.addImage(p.dataUrl, "JPEG", cursorX, cursorY + 1, tw, tileH, undefined, "FAST");
+          } catch (err) {
+            console.warn("Skipping photo embed:", err);
+          }
+          cursorX += tw + 2;
+        }
+        cursorY += tileH + 2;
+      }
+
+      y = cursorY + ROW_PAD_Y;
+
+      // Hairline divider between items
+      if (idx < items.length - 1) {
+        setDraw(pdf, COLOR.faint);
+        pdf.setLineWidth(0.15);
+        pdf.line(M + 1, y, PAGE_W - M - 1, y);
+      }
+    }
 
     y += 4;
-
-    // Question text
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(10);
-    setText(pdf, COLOR.ink);
-    pdf.text(qLines, M, y + 3);
-    y += qLines.length * 4.6 + 1;
-
-    // Comment, italic
-    if (cLines.length > 0) {
-      pdf.setFont("helvetica", "italic");
-      pdf.setFontSize(9);
-      setText(pdf, COLOR.stone700);
-      pdf.text(cLines, M, y + 3);
-      y += cLines.length * 4 + 2;
-    }
-
-    // Photos row
-    if (photos.length > 0) {
-      const tileH = 24;
-      const tileMaxW = 32;
-      let cursorX = M;
-      const photoY = y + 1;
-      for (const p of photos) {
-        const aspect = p.w / p.h;
-        const tw = Math.min(tileMaxW, tileH * aspect);
-        if (cursorX + tw > PAGE_W - M) break; // single row; extras silently dropped
-        try {
-          pdf.addImage(p.dataUrl, "JPEG", cursorX, photoY, tw, tileH, undefined, "FAST");
-        } catch (err) {
-          console.warn("Skipping photo embed:", err);
-        }
-        cursorX += tw + 2;
-      }
-      y += tileH + 3;
-    }
-
-    y += 1;
   }
 
   // ---- Footer page numbers ----
