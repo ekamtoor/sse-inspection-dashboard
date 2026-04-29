@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body {
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-display { font-family: "Fraunces", ui-serif, Georgia, serif; font-optical-sizing: auto; }
+.font-mono { font-family: "Geist Mono", ui-monospace, monospace; }
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #a8a29e; }
+
+@keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.animate-slide { animation: slideIn 0.25s ease-out; }
+.animate-slide-up { animation: slideUp 0.25s ease-out; }
+
+/* iOS prevents zoom on input focus when font-size is at least 16px */
+@media (max-width: 767px) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* Safe-area aware bottom padding helper */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}

@@ -1,0 +1,101 @@
+// Comprehensive pre-inspection rubric — Shell + Marathon merged.
+// Compliance & Legal section is ZERO-TOLERANCE: failure = immediate brand action.
+
+export const SCHEMA = [
+  {
+    id: "image",
+    label: "Image Essentials",
+    critical: true,
+    source: "Shell",
+    subtitle: "MUST PASS — failed items must be cured before corporate visit",
+    items: [
+      { id: "I-1",  q: "Shell Primary ID sign (PID) clean and well-maintained with prices properly displayed?", pts: 6 },
+      { id: "I-2",  q: "Forecourt area well maintained?", pts: 6 },
+      { id: "I-3a", q: "Canopy clean and well-maintained?", pts: 6 },
+      { id: "I-3b", q: "Location well-lit during hours of darkness?", pts: 3 },
+      { id: "I-4",  q: "Are the pumps well maintained, and in working order?", pts: 6 },
+      { id: "I-5",  q: "Interior of the store clean, well-lit, and accessible?", pts: 6 },
+      { id: "I-6",  q: "Restrooms available, functioning/operational, and well-lit?", pts: 6 },
+    ],
+  },
+  {
+    id: "service",
+    label: "Service Essentials",
+    source: "Shell",
+    items: [
+      { id: "S-1", q: "Restrooms clean, stocked with toilet paper, soap, and paper towels?", pts: 6 },
+      { id: "S-2", q: "Forecourt area cleaned?", pts: 6 },
+      { id: "S-3", q: "Fuel island amenities available, stocked, and clean (squeegees, towels, water)?", pts: 6 },
+      { id: "S-4", q: "Pumps clean (top, skirt, valance)?", pts: 6 },
+      { id: "S-5", q: "Cashier wearing a clean, brand-approved uniform shirt or nametag?", pts: 6 },
+      { id: "S-6", q: "Cashier acknowledged you during your visit?", pts: 6 },
+    ],
+  },
+  {
+    id: "marketing",
+    label: "Marketing Programs",
+    source: "Shell",
+    items: [
+      { id: "M-1", q: "Site displaying current Shell/Marathon National Campaign POP in forecourt?", pts: 4 },
+      { id: "M-2", q: "Did the cashier mention the Fuel Rewards / Marathon Rewards program?", pts: 4 },
+    ],
+  },
+  {
+    id: "experience",
+    label: "Customer Experience",
+    source: "Shell",
+    items: [
+      { id: "D-1", q: "Product shelves, displays, coolers, and food service areas clean and functioning?", pts: 4 },
+      { id: "D-2", q: "C-store has a good selection of products?", pts: 4 },
+      { id: "D-3", q: "Food service offer present and well-stocked?", pts: 4 },
+      { id: "D-4", q: "Staff treatment — pleasant, polite, made you feel valued?", pts: 4 },
+      { id: "D-5", q: "Restrooms exceed expectations (touch-less fixtures, baby station, etc.)?", pts: 4 },
+      { id: "D-6", q: "Carwash present, clean, and fully operational?", pts: 4 },
+    ],
+  },
+  {
+    id: "compliance-legal",
+    label: "Compliance & Legal",
+    critical: true,
+    zeroTolerance: true,
+    source: "Shell + Marathon",
+    subtitle: "ZERO TOLERANCE — single failure is grounds for immediate brand action",
+    items: [
+      { id: "C-1", q: "Site does NOT sell drug paraphernalia (scales, pipes, bongs, glass blunts, rolling trays for non-tobacco use, smoking accessories)?", pts: 10 },
+      { id: "C-2", q: "All employees attentive (not on phone, eating, smoking, or distracted while on duty)?", pts: 5 },
+    ],
+  },
+  {
+    id: "brand",
+    label: "Brand Standards & Site Condition",
+    source: "Marathon",
+    subtitle: "Items Marathon/ARCO scores that Shell doesn't — applied to all sites for strictest pass",
+    items: [
+      { id: "BS-1",  q: "Channel letters and canopy fascia well-maintained, meet brand standards?", pts: 6 },
+      { id: "BS-2",  q: "Top Tier branding visible on all gasoline dispensers?", pts: 3 },
+      { id: "BS-3",  q: "No more than one fueling position out of order?", pts: 5 },
+      { id: "BS-4",  q: "Trash receptacles have lids and meet brand standards?", pts: 3 },
+      { id: "BS-5",  q: "Dispenser island curbs and bollards well-maintained (no rust, chips, bent)?", pts: 4 },
+      { id: "BS-6",  q: "Building curbs and perimeter curbs well-maintained?", pts: 2 },
+      { id: "BS-7",  q: "Landscaped areas and parking lot clean, well-maintained, no potholes?", pts: 2 },
+      { id: "BS-8",  q: "Building exterior (paint, siding, soffit, gutters) well-maintained?", pts: 2 },
+      { id: "BS-9",  q: "Windows clear, unobstructed view (no excessive signage blocking forecourt visibility)?", pts: 2 },
+      { id: "BS-10", q: "Brand-issued gift cards displayed for purchase inside C-store?", pts: 2 },
+      { id: "BS-11", q: "Aisles free of clutter, pallets, boxes (no active stocking exemption)?", pts: 3 },
+      { id: "BS-12", q: "Loyalty / Rewards mentioned on dispenser screen prompts?", pts: 3 },
+      { id: "BS-13", q: "Site feels safe — adequate lighting, no loitering, security visible?", pts: 3 },
+    ],
+  },
+  {
+    id: "pumps",
+    label: "Pumps & Fueling Area",
+    source: "Shell",
+    subtitle: "Per-pump check (1–8). Failures cascade into Image Essentials I-4.",
+    items: Array.from({ length: 8 }, (_, i) => ({
+      id: `P-${i + 1}`,
+      q: `Pump ${i + 1} — clean, well-maintained, in working order?`,
+      pts: 0,
+      affects: "I-4",
+    })),
+  },
+];
