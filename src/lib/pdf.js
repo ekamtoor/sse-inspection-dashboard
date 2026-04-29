@@ -93,7 +93,7 @@ export async function generateReportPDF({ report, site }) {
 
   // ---- Header band ----
   setFill(pdf, COLOR.ink);
-  pdf.rect(0, 0, PAGE_W, 44, "F");
+  pdf.rect(0, 0, PAGE_W, 54, "F");
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(9);
@@ -123,8 +123,8 @@ export async function generateReportPDF({ report, site }) {
     minute: "2-digit",
   });
 
-  const labelY = M + 24;
-  const valueY = M + 30;
+  const labelY = M + 26;
+  const valueY = M + 34;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(7);
   setText(pdf, COLOR.amber);
@@ -145,11 +145,12 @@ export async function generateReportPDF({ report, site }) {
     report.fails.length > 0 ? COLOR.red : [120, 120, 120]
   );
   pdf.text(`${report.fails.length}`, M + 100, valueY);
+  pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
   setText(pdf, [180, 175, 170]);
-  pdf.text(`${dateStr}\n${timeStr}`, M + 130, valueY - 2);
+  pdf.text(`${dateStr} · ${timeStr}`, M + 130, valueY);
 
-  y = 52;
+  y = 62;
 
   // ---- ZT violation banner ----
   const ztFails = report.fails.filter((f) => {

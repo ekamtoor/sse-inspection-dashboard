@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, MapPin, ClipboardCheck, AlertTriangle, FileText, Calendar,
-  Wrench, Archive, Shield, LogOut,
+  Wrench, Archive, Shield, LogOut, Users,
 } from "lucide-react";
 
 export default function Sidebar({ view, setView, activeInspection, activeInternal, userEmail, onSignOut }) {
@@ -13,6 +13,7 @@ export default function Sidebar({ view, setView, activeInspection, activeInterna
     { id: "reports",    label: "Reports",           icon: FileText },
     { id: "corporate",  label: "Corporate Archive", icon: Archive },
     { id: "issues",     label: "Issues Tracker",    icon: AlertTriangle },
+    { id: "inspectors", label: "Inspectors",        icon: Users },
   ];
 
   return (

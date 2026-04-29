@@ -26,6 +26,8 @@ import CorporateView from "./components/corporate/CorporateView.jsx";
 import CorporateForm from "./components/corporate/CorporateForm.jsx";
 import IssuesView from "./components/issues/IssuesView.jsx";
 import IssueDetailModal from "./components/issues/IssueDetailModal.jsx";
+import InspectorsView from "./components/inspectors/InspectorsView.jsx";
+import InspectorFormModal from "./components/inspectors/InspectorFormModal.jsx";
 
 function FullScreenLoader({ label }) {
   return (
@@ -66,10 +68,14 @@ function AppShell({ user }) {
   const [corporate, setCorporate]             = useUserDataKey("corporate");
   const [internalAudits, setInternalAudits]   = useUserDataKey("internal_audits");
 
+  const [inspectors, setInspectors]           = useUserDataKey("inspectors");
+
   const [view, setViewRaw] = useUserDataKey("view");
   const [activeInspection, setActiveInspection] = useUserDataKey("active_inspection");
   const [activeInternal,   setActiveInternal]   = useUserDataKey("active_internal");
   const [issueDetail,  setIssueDetail]  = useState(null);
+  const [showInspectorForm, setShowInspectorForm] = useState(false);
+  const [editingInspector,  setEditingInspector]  = useState(null);
   const [reportDetail, setReportDetail] = useState(null);
   const [corpDetail,   setCorpDetail]   = useState(null);
   const [siteDetailId, setSiteDetailId] = useState(null);
@@ -171,6 +177,17 @@ function AppShell({ user }) {
     });
     navigate("inspection");
   };
+  const resolveInspectorName = () => {
+    if (activeInspection?.scheduleId) {
+      const sched = (scheduled || []).find((s) => s.id === activeInspection.scheduleId);
+      if (sched?.inspector) return sched.inspector;
+    }
+    const def = (inspectors || []).find((i) => i.isDefault);
+    if (def?.name) return def.name;
+    if ((inspectors || [])[0]?.name) return inspectors[0].name;
+    return user.email || "Inspector";
+  };
+
   const completeInspection = () => {
     if (!activeInspection) return;
     const score = computeScore(activeInspection.answers);
@@ -186,11 +203,13 @@ function AppShell({ user }) {
     const ztFails = SCHEMA.filter((s) => s.zeroTolerance)
       .flatMap((sec) => sec.items.filter((it) => activeInspection.answers[it.id] === "fail")).length;
 
+    const inspectorName = resolveInspectorName();
+
     const report = {
       id: `RPT-${Date.now()}`,
       siteId: activeInspection.siteId,
       completedAt: new Date().toISOString(),
-      inspector: user.email || "Inspector",
+      inspector: inspectorName,
       score: score.earned,
       total: score.total,
       answers: activeInspection.answers,
@@ -227,7 +246,7 @@ function AppShell({ user }) {
           opened: new Date().toISOString().slice(0, 10),
           note:
             (sec?.zeroTolerance ? "[ZERO TOLERANCE] " : "") + (f.comment || "Auto-generated from internal pre-inspection."),
-          assignee: user.email || "Inspector",
+          assignee: inspectorName,
         };
       });
       setIssues((prev) => [...newIssues, ...(prev || [])]);
@@ -340,6 +359,46 @@ function AppShell({ user }) {
     setCorporate((prev) => [entry, ...(prev || [])]);
     setShowCorpForm(false);
     toast("Corporate report archived.");
+  };
+
+  const saveInspector = (entry) => {
+    const list = inspectors || [];
+    const isExisting = entry.id && list.some((i) => i.id === entry.id);
+    const id = entry.id || `INS-${Date.now()}`;
+    const willBeDefault = entry.isDefault || list.length === 0;
+    let next;
+    if (isExisting) {
+      next = list.map((i) => ({
+        ...i,
+        ...(i.id === id ? { ...entry, id } : {}),
+        isDefault: willBeDefault ? i.id === id : i.isDefault,
+      }));
+    } else {
+      next = [
+        ...list.map((i) => ({ ...i, isDefault: willBeDefault ? false : i.isDefault })),
+        { ...entry, id },
+      ];
+    }
+    if (!next.some((i) => i.isDefault) && next.length > 0) next[0].isDefault = true;
+    setInspectors(next);
+    setShowInspectorForm(false);
+    setEditingInspector(null);
+    toast(isExisting ? "Inspector updated." : "Inspector added.");
+  };
+
+  const deleteInspector = (id) => {
+    const list = inspectors || [];
+    const wasDefault = list.find((i) => i.id === id)?.isDefault;
+    let next = list.filter((i) => i.id !== id);
+    if (wasDefault && next.length > 0) next[0] = { ...next[0], isDefault: true };
+    setInspectors(next);
+    toast("Inspector removed.");
+  };
+
+  const makeInspectorDefault = (id) => {
+    const list = inspectors || [];
+    setInspectors(list.map((i) => ({ ...i, isDefault: i.id === id })));
+    toast("Default inspector updated.");
   };
 
   if (!data) return <FullScreenLoader label="Loading your inspections…" />;
@@ -495,6 +554,23 @@ function AppShell({ user }) {
           {view === "issues" && (
             <IssuesView issues={issues || []} sites={sitesEnriched} setIssueDetail={setIssueDetail} />
           )}
+
+          {view === "inspectors" && (
+            <InspectorsView
+              inspectors={inspectors || []}
+              onAdd={() => { setEditingInspector(null); setShowInspectorForm(true); }}
+              onEdit={(p) => { setEditingInspector(p); setShowInspectorForm(true); }}
+              onDelete={(p) =>
+                setConfirmDialog({
+                  title: `Remove ${p.name}?`,
+                  message: "Existing reports keep this name. Future reports will use the default.",
+                  confirmLabel: "Remove",
+                  onConfirm: () => deleteInspector(p.id),
+                })
+              }
+              onMakeDefault={(p) => makeInspectorDefault(p.id)}
+            />
+          )}
         </div>
 
         <MobileBottomNav
@@ -529,6 +605,14 @@ function AppShell({ user }) {
 
       {showCorpForm && (
         <CorporateForm sites={sitesEnriched} onSubmit={addCorporate} onClose={() => setShowCorpForm(false)} />
+      )}
+
+      {showInspectorForm && (
+        <InspectorFormModal
+          inspector={editingInspector}
+          onSubmit={saveInspector}
+          onClose={() => { setShowInspectorForm(false); setEditingInspector(null); }}
+        />
       )}
 
       {issueDetail && (

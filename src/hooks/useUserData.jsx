@@ -9,6 +9,7 @@ const KEYS = [
   "reports",
   "corporate",
   "internal_audits",
+  "inspectors",
   "active_inspection",
   "active_internal",
   "view",
@@ -21,10 +22,27 @@ const SEEDS = {
   reports: [],
   corporate: SEED_CORPORATE,
   internal_audits: [],
+  inspectors: [],
   active_inspection: null,
   active_internal: null,
   view: "dashboard",
 };
+
+function defaultInspectorFromUser(user) {
+  const email = user?.email || "";
+  const guess = email.split("@")[0] || "Me";
+  const name = guess
+    .replace(/[._-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim() || "Me";
+  return {
+    id: `INS-${Date.now()}`,
+    name,
+    email,
+    role: "District Ops",
+    isDefault: true,
+  };
+}
 
 const DataContext = createContext(null);
 
@@ -56,12 +74,28 @@ export function DataProvider({ user, children }) {
       if (row) {
         const loaded = {};
         for (const k of KEYS) loaded[k] = row[k] ?? SEEDS[k];
+
+        // Backfill an initial inspector for accounts created before this column
+        // existed, so reports stop falling back to the email.
+        if (Array.isArray(loaded.inspectors) && loaded.inspectors.length === 0) {
+          const seeded = defaultInspectorFromUser(user);
+          loaded.inspectors = [seeded];
+          supabase
+            .from("user_data")
+            .update({ inspectors: loaded.inspectors })
+            .eq("user_id", user.id)
+            .then(({ error: backfillErr }) => {
+              if (backfillErr) console.warn("Backfill inspectors failed:", backfillErr.message);
+            });
+        }
+
         latestRef.current = loaded;
         setData(loaded);
         return;
       }
 
       const seed = { ...SEEDS };
+      seed.inspectors = [defaultInspectorFromUser(user)];
       const { error: insertErr } = await supabase
         .from("user_data")
         .insert({ user_id: user.id, ...seed });
