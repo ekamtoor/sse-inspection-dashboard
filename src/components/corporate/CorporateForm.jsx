@@ -69,7 +69,9 @@ export default function CorporateForm({ sites, onSubmit, onClose }) {
                 <option value="Shell">Shell</option>
                 <option value="Marathon">Marathon</option>
                 <option value="ARCO">ARCO</option>
-                <option value="Marathon/ARCO">Marathon/ARCO</option>
+                <option value="Sunoco">Sunoco</option>
+                <option value="BP">BP</option>
+                <option value="Unbranded">Unbranded</option>
               </select>
             </Field>
             <Field label="Inspector">

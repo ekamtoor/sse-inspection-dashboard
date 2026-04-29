@@ -9,7 +9,7 @@ export default function SiteFormModal({ site, onSubmit, onClose }) {
       : {
           id: "", name: "", address: "", city: "", zip: "", brand: "Shell", pumps: 8,
           status: "good", nextDue: "", notes: "",
-          operator: { name: "Anil Patel", email: "anil@sevenstar.energy", phone: "937-555-0142" },
+          operator: { name: "", email: "", phone: "" },
           manager: { name: "", email: "", phone: "" },
         }
   );
@@ -105,7 +105,9 @@ export default function SiteFormModal({ site, onSubmit, onClose }) {
                   <option value="Shell">Shell</option>
                   <option value="Marathon">Marathon</option>
                   <option value="ARCO">ARCO</option>
-                  <option value="Marathon/ARCO">Marathon/ARCO</option>
+                  <option value="Sunoco">Sunoco</option>
+                  <option value="BP">BP</option>
+                  <option value="Unbranded">Unbranded</option>
                 </select>
               </Field>
               <Field label="Pumps" required error={errors.pumps}>

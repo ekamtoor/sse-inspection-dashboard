@@ -69,7 +69,7 @@ export const SCHEMA = [
     id: "brand",
     label: "Brand Standards & Site Condition",
     source: "Marathon",
-    subtitle: "Items Marathon/ARCO scores that Shell doesn't — applied to all sites for strictest pass",
+    subtitle: "Items Marathon and ARCO score that Shell doesn't — applied to all sites for strictest pass",
     items: [
       { id: "BS-1",  q: "Channel letters and canopy fascia well-maintained, meet brand standards?", pts: 6 },
       { id: "BS-2",  q: "Top Tier branding visible on all gasoline dispensers?", pts: 3 },
