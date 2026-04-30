@@ -210,7 +210,7 @@ function AppShell({ user }) {
       siteId,
       site,
       scheduleId,
-      pumpPositions: (Number(site.pumps) || 0) * 2,
+      pumpPositions: Number(site.pumps) || 0,
       startedAt: new Date().toISOString(),
       answers: {},
       comments: {},
@@ -260,7 +260,7 @@ function AppShell({ user }) {
       passed: score.passed,
       failReasons: score.failReasons,
       pumpPositions: activeInspection.pumpPositions
-        ?? ((Number(activeInspection.site?.pumps) || 0) * 2),
+        ?? (Number(activeInspection.site?.pumps) || 0),
       answers,
       comments,
       photos: activeInspection.photos || {},

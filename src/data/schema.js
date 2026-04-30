@@ -139,18 +139,19 @@ export function buildPumpsSection(positionCount) {
   };
 }
 
-// Resolve the position count from whatever shape the caller has handy:
-//   - a snapshot stored on an inspection / report (`pumpPositions` or `site.pumps`)
-//   - a live site object (`site.pumps`)
-//   - a raw number
+// Resolve the position count from whatever shape the caller has handy.
+// `site.pumps` (or `inspection.pumps`) is now the literal fueling-position
+// count — sites enter 12, the inspection generates 12 rows. Reports that
+// were generated under the old convention keep their stamped pumpPositions
+// so historical reports stay consistent.
 export function resolvePumpPositions(input) {
   if (input == null) return 0;
   if (typeof input === "number") return input;
   if (typeof input.pumpPositions === "number") return input.pumpPositions;
   const sitePumps = Number(input.site?.pumps);
-  if (Number.isFinite(sitePumps) && sitePumps > 0) return sitePumps * 2;
+  if (Number.isFinite(sitePumps) && sitePumps > 0) return sitePumps;
   const directPumps = Number(input.pumps);
-  if (Number.isFinite(directPumps) && directPumps > 0) return directPumps * 2;
+  if (Number.isFinite(directPumps) && directPumps > 0) return directPumps;
   return 0;
 }
 
