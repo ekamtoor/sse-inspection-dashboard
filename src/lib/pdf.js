@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { SCHEMA, PASSING_PERCENTAGE } from "../data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE, getInspectionSchema } from "../data/schema.js";
 
 // A4 portrait, mm units. Designed to print or share via OS-level share sheet.
 const PAGE_W = 210;
@@ -148,6 +148,7 @@ export async function generateReportPDF({ report, site }) {
   ]);
 
   const summary = deriveSummary(report);
+  const fullSchema = getInspectionSchema(report);
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   let y = M;
@@ -379,7 +380,7 @@ export async function generateReportPDF({ report, site }) {
   const Q_COL_W = CONTENT_W - ID_COL_W - STATUS_W - 2;
   const ROW_PAD_Y = 2.2;
 
-  for (const sec of SCHEMA) {
+  for (const sec of fullSchema) {
     const items = sec.items;
     if (!items || items.length === 0) continue;
     const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);

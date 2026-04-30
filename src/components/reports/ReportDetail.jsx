@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ShieldAlert, Download, Share2, Loader2, Trash2 } from "lucide-react";
-import { SCHEMA, PASSING_PERCENTAGE } from "../../data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE, getInspectionSchema } from "../../data/schema.js";
 import PriorityPill from "../shared/PriorityPill.jsx";
 import PhotoLightbox from "../shared/PhotoLightbox.jsx";
 
@@ -56,6 +56,9 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
   const site = sites.find((s) => s.id === report.siteId);
   const ztFails = (report.fails || []).filter((f) => SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id)));
   const summary = useMemo(() => deriveSummary(report), [report]);
+  // Reports persist their pumpPositions so the per-position list stays
+  // consistent even if the site's pump count is later edited.
+  const fullSchema = useMemo(() => getInspectionSchema(report), [report]);
   const [pdfStatus, setPdfStatus] = useState("idle");
   const [lightbox, setLightbox] = useState(null);
   const canShare =
@@ -66,7 +69,7 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
   // Flatten all photos in order so the lightbox can navigate across items.
   const allPhotos = useMemo(() => {
     const out = [];
-    for (const sec of SCHEMA) {
+    for (const sec of fullSchema) {
       for (const it of sec.items) {
         const list = report.photos?.[it.id] || [];
         for (const p of list) {
@@ -259,7 +262,7 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
       <div className="bg-white border border-stone-200 rounded-xl p-5 md:p-6">
         <h3 className="font-display text-lg font-semibold mb-4">By Section</h3>
         <div className="space-y-4">
-          {SCHEMA.map((sec) => {
+          {fullSchema.map((sec) => {
             // Skip documentation-only sections (e.g. per-pump checklist) from
             // the score-bar overview — they don't contribute to /200.
             if (sec.documentation) return null;
@@ -302,7 +305,7 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
           </p>
         </div>
         <div>
-          {SCHEMA.map((sec) => {
+          {fullSchema.map((sec) => {
             const items = sec.items;
             if (!items || items.length === 0) return null;
             const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);

@@ -115,18 +115,54 @@ export const SCHEMA = [
       { id: "EQ-5", q: "Vacuum operational, suction strong, hoses clean?", pts: 3 },
     ],
   },
-  {
+];
+
+// Pumps & Fueling Positions is generated per-site rather than living in SCHEMA
+// so the position count tracks each site's pump count (2 positions per pump,
+// one on each side). It contributes 0 points to the 200-point total — overall
+// pump quality is already captured at I-4 / S-4. Reports persist the position
+// count they were generated against so historical reports keep their original
+// row count even if the site's pump count is later updated.
+export function buildPumpsSection(positionCount) {
+  const count = Math.max(0, Math.floor(Number(positionCount) || 0));
+  if (count === 0) return null;
+  return {
     id: "pumps",
     label: "Pumps & Fueling Positions",
     documentation: true,
-    subtitle: "Per-pump check — mark N/A for any positions that don't exist at the site. Failures here are tracked but do not change the 200-point score (overall pump quality is already scored under Image Essentials I-4 and Service Essentials S-4).",
-    items: Array.from({ length: 16 }, (_, i) => ({
+    subtitle: "Per-position check (two positions per pump). Mark N/A for any positions that don't exist.",
+    items: Array.from({ length: count }, (_, i) => ({
       id: `P-${i + 1}`,
-      q: `Pump ${i + 1} — clean, operational, free of graffiti and stickers?`,
+      q: `Position ${i + 1} — clean, operational, free of graffiti and stickers?`,
       pts: 0,
     })),
-  },
-];
+  };
+}
+
+// Resolve the position count from whatever shape the caller has handy:
+//   - a snapshot stored on an inspection / report (`pumpPositions` or `site.pumps`)
+//   - a live site object (`site.pumps`)
+//   - a raw number
+export function resolvePumpPositions(input) {
+  if (input == null) return 0;
+  if (typeof input === "number") return input;
+  if (typeof input.pumpPositions === "number") return input.pumpPositions;
+  const sitePumps = Number(input.site?.pumps);
+  if (Number.isFinite(sitePumps) && sitePumps > 0) return sitePumps * 2;
+  const directPumps = Number(input.pumps);
+  if (Number.isFinite(directPumps) && directPumps > 0) return directPumps * 2;
+  return 0;
+}
+
+// Combine the static scored SCHEMA with the dynamic Pumps section.
+// Components that render every item in an inspection (InspectionView,
+// ReportDetail, PDF) should use this; scoring stays on the static SCHEMA so
+// per-pump checks never leak into the 200-point total.
+export function getInspectionSchema(input) {
+  const positions = resolvePumpPositions(input);
+  const pumps = buildPumpsSection(positions);
+  return pumps ? [...SCHEMA, pumps] : SCHEMA;
+}
 
 // Sanity check for future edits — keeps the rubric honest at 200 points.
 export const TOTAL_POINTS = SCHEMA.reduce(

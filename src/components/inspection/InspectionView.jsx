@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ClipboardCheck, FileText, ShieldAlert, Trash2 } from "lucide-react";
-import { SCHEMA } from "../../data/schema.js";
+import { SCHEMA, getInspectionSchema } from "../../data/schema.js";
 import { computeScore } from "../../lib/scoring.js";
 import { uploadPhoto, deletePhoto } from "../../lib/photos.js";
 import SectionBlock from "./SectionBlock.jsx";
@@ -68,8 +68,12 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
     }
   };
 
+  // Full schema (scored sections + dynamic Pumps section sized to this site)
+  // for rendering. computeScore stays on the static SCHEMA so the per-pump
+  // checks never count toward the 200-pt total.
+  const fullSchema = useMemo(() => getInspectionSchema(inspection), [inspection]);
   const score = useMemo(() => computeScore(inspection.answers), [inspection.answers]);
-  const failed = SCHEMA.flatMap((sec) => sec.items.filter((it) => inspection.answers[it.id] === "fail"));
+  const failed = fullSchema.flatMap((sec) => sec.items.filter((it) => inspection.answers[it.id] === "fail"));
   const ztFailed = SCHEMA.filter((s) => s.zeroTolerance)
     .flatMap((sec) => sec.items.filter((it) => inspection.answers[it.id] === "fail")).length;
   const pct = (score.answered / score.totalItems) * 100;
@@ -213,7 +217,7 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
       </div>
 
       <div className="p-4 md:p-8 space-y-3">
-        {SCHEMA.map((sec) => (
+        {fullSchema.map((sec) => (
           <SectionBlock
             key={sec.id}
             section={sec}

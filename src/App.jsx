@@ -210,6 +210,7 @@ function AppShell({ user }) {
       siteId,
       site,
       scheduleId,
+      pumpPositions: (Number(site.pumps) || 0) * 2,
       startedAt: new Date().toISOString(),
       answers: {},
       comments: {},
@@ -258,6 +259,8 @@ function AppShell({ user }) {
       percentage: score.percentage,
       passed: score.passed,
       failReasons: score.failReasons,
+      pumpPositions: activeInspection.pumpPositions
+        ?? ((Number(activeInspection.site?.pumps) || 0) * 2),
       answers,
       comments,
       photos: activeInspection.photos || {},
