@@ -1,11 +1,18 @@
 import { useRef } from "react";
 import { CheckCircle2, XCircle, MinusCircle, Camera, X, Loader2 } from "lucide-react";
 
+// Cap photos per item so a runaway upload doesn't bloat a single inspection.
+// 5 fits the common "snap a few angles" use case without getting silly.
+const PHOTO_LIMIT = 5;
+
 export default function ItemRow({
   item, answer, comment, photoList, uploadingCount,
   setAnswer, setComment, setPhoto, removePhoto,
 }) {
   const fileRef = useRef();
+  const photoCount = photoList?.length || 0;
+  const inflight = uploadingCount || 0;
+  const remaining = Math.max(0, PHOTO_LIMIT - photoCount - inflight);
   return (
     <div className="px-4 md:px-6 py-4 md:py-5">
       <div className="flex items-start gap-3 md:gap-4">
@@ -54,7 +61,7 @@ export default function ItemRow({
             </button>
             {item.pts > 0 && <span className="ml-1 font-mono text-[10px] text-stone-400 flex-shrink-0">+{item.pts}</span>}
           </div>
-          {(answer || comment || (photoList && photoList.length > 0) || uploadingCount > 0) && (
+          {(answer || comment || photoCount > 0 || inflight > 0) && (
             <div className="mt-3 space-y-3">
               <textarea
                 value={comment || ""}
@@ -75,7 +82,7 @@ export default function ItemRow({
                     </button>
                   </div>
                 ))}
-                {Array.from({ length: uploadingCount || 0 }).map((_, i) => (
+                {Array.from({ length: inflight }).map((_, i) => (
                   <div
                     key={`upload-${i}`}
                     className="w-16 h-16 rounded-md bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400"
@@ -83,25 +90,40 @@ export default function ItemRow({
                     <Loader2 className="w-5 h-5 animate-spin" />
                   </div>
                 ))}
+                {/* Drop capture="environment" so iOS shows the native picker
+                    (Camera / Photo Library / Files). Library mode honors the
+                    `multiple` attribute; capture mode silently ignored it and
+                    forced single-shot, which is why uploads felt limited to one. */}
                 <input
                   ref={fileRef}
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   multiple
                   className="hidden"
                   onChange={(e) => {
-                    setPhoto(e.target.files);
+                    const files = Array.from(e.target.files || []).slice(0, remaining);
+                    if (files.length > 0) setPhoto(files);
                     e.target.value = "";
                   }}
                 />
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="w-16 h-16 rounded-md border border-dashed border-stone-300 hover:border-stone-500 hover:bg-stone-50 flex flex-col items-center justify-center gap-0.5 text-stone-500"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span className="text-[9px] uppercase tracking-wider">Add</span>
-                </button>
+                {remaining > 0 ? (
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="w-16 h-16 rounded-md border border-dashed border-stone-300 hover:border-stone-500 hover:bg-stone-50 flex flex-col items-center justify-center gap-0.5 text-stone-500"
+                    title={`Add up to ${remaining} more photo${remaining === 1 ? "" : "s"} (max ${PHOTO_LIMIT})`}
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span className="text-[9px] uppercase tracking-wider">Add</span>
+                  </button>
+                ) : (
+                  <div
+                    className="w-16 h-16 rounded-md border border-stone-200 bg-stone-50 flex flex-col items-center justify-center gap-0.5 text-stone-400"
+                    title={`Photo limit reached (${PHOTO_LIMIT} max)`}
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span className="text-[9px] uppercase tracking-wider">Max</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -110,3 +132,4 @@ export default function ItemRow({
     </div>
   );
 }
+

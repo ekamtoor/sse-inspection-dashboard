@@ -1,20 +1,45 @@
-import { useMemo, useState } from "react";
-import { ChevronLeft, ClipboardCheck, FileText, ShieldAlert, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import {
+  ChevronLeft, ClipboardCheck, FileText, ShieldAlert, Trash2,
+  Send, Paperclip, Loader2, X, Image as ImageIcon, FileText as FileIcon, Download,
+} from "lucide-react";
 import { SCHEMA, getInspectionSchema } from "../../data/schema.js";
 import { computeScore } from "../../lib/scoring.js";
-import { uploadPhoto, deletePhoto } from "../../lib/photos.js";
+import { uploadPhoto, deletePhoto, uploadFile, deleteFile } from "../../lib/photos.js";
 import SectionBlock from "./SectionBlock.jsx";
 
-export default function InspectionView({ inspection, setInspection, onComplete, onLeave, onDiscard, user }) {
+function fmtTime(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function isImageAttachment(att) {
+  return (att?.contentType || "").startsWith("image/")
+    || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(att?.name || "");
+}
+
+export default function InspectionView({
+  inspection, setInspection, onComplete, onLeave, onDiscard, user, inspectorName,
+}) {
   const [openSection, setOpenSection] = useState("image");
   const [uploadingByItem, setUploadingByItem] = useState({});
+  const [noteDraft, setNoteDraft] = useState("");
+  const [pendingAttachment, setPendingAttachment] = useState(null);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [noteError, setNoteError] = useState(null);
+  const noteFileRef = useRef();
 
   if (!inspection) {
     return (
       <div className="p-4 md:p-8">
         <div className="bg-white border border-stone-200 rounded-xl p-8 md:p-12 text-center">
           <ClipboardCheck className="w-10 h-10 text-stone-300 mx-auto mb-4" />
-          <h3 className="font-display text-xl font-semibold">No active pre-inspection</h3>
+          <h3 className="font-display text-xl font-semibold">No active inspection</h3>
           <p className="text-sm text-stone-500 mt-2">Start one from a scheduled inspection or a site card.</p>
         </div>
       </div>
@@ -38,7 +63,6 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
         uploaded.push(result);
       } catch (err) {
         console.error("Photo upload failed:", err);
-        // Surface a simple alert; toast plumbing isn't reachable from here.
         // eslint-disable-next-line no-alert
         alert(`Couldn't upload ${f.name}: ${err?.message || "unknown error"}`);
       }
@@ -63,14 +87,69 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
       ...curr,
       photos: { ...curr.photos, [id]: (curr.photos?.[id] || []).filter((_, i) => i !== idx) },
     }));
-    if (target?.path) {
-      deletePhoto(target.path);
+    if (target?.path) deletePhoto(target.path);
+  };
+
+  // ---- Inspection-level notes ----
+  const pickNoteAttachment = async (file) => {
+    if (!file || !user) return;
+    setAttachmentUploading(true);
+    setNoteError(null);
+    try {
+      const res = await uploadFile(user.id, `inspections/${inspection.id}`, file);
+      setPendingAttachment({
+        url: res.url,
+        path: res.path,
+        name: file.name,
+        contentType: file.type || "application/octet-stream",
+        size: file.size,
+      });
+    } catch (err) {
+      console.error("Note attachment upload failed:", err);
+      setNoteError(err?.message || "Upload failed");
+    } finally {
+      setAttachmentUploading(false);
     }
   };
 
-  // Full schema (scored sections + dynamic Pumps section sized to this site)
-  // for rendering. computeScore stays on the static SCHEMA so the per-pump
-  // checks never count toward the 200-pt total.
+  const clearPendingAttachment = () => {
+    if (pendingAttachment?.path) deleteFile(pendingAttachment.path);
+    setPendingAttachment(null);
+  };
+
+  const postNote = () => {
+    const text = noteDraft.trim();
+    if (!text && !pendingAttachment) return;
+    const note = {
+      id: `NOTE-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      at: new Date().toISOString(),
+      actor: inspectorName || user?.email || "Inspector",
+      text,
+      attachment: pendingAttachment,
+    };
+    setInspection((curr) => {
+      if (!curr) return curr;
+      return { ...curr, notes: [...(curr.notes || []), note] };
+    });
+    setNoteDraft("");
+    setPendingAttachment(null);
+    setNoteError(null);
+  };
+
+  const removeNote = (noteId) => {
+    setInspection((curr) => {
+      if (!curr) return curr;
+      const target = (curr.notes || []).find((n) => n.id === noteId);
+      if (target?.attachment?.path) deleteFile(target.attachment.path);
+      return { ...curr, notes: (curr.notes || []).filter((n) => n.id !== noteId) };
+    });
+  };
+
+  const notes = inspection.notes || [];
+
+  // Full schema (scored sections + dynamic Pumps section sized to this site).
+  // computeScore stays on the static SCHEMA so per-pump checks never count
+  // toward the 200-pt total.
   const fullSchema = useMemo(() => getInspectionSchema(inspection), [inspection]);
   const score = useMemo(() => computeScore(inspection.answers), [inspection.answers]);
   const failed = fullSchema.flatMap((sec) => sec.items.filter((it) => inspection.answers[it.id] === "fail"));
@@ -233,6 +312,151 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
             removePhoto={removePhoto}
           />
         ))}
+
+        {/* Inspection-level Notes (overall comments + attachments) */}
+        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+          <div className="px-4 md:px-6 py-3 md:py-4 border-b border-stone-200">
+            <h3 className="font-display text-lg font-semibold">Inspection Notes</h3>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Overall walkthrough notes — each entry is timestamped and appears in the saved report and PDF.
+            </p>
+          </div>
+
+          {notes.length === 0 ? (
+            <div className="px-4 md:px-6 py-5 text-center text-sm text-stone-500 italic">
+              No notes yet — add one below.
+            </div>
+          ) : (
+            <ol className="divide-y divide-stone-100">
+              {notes.slice().sort((a, b) => (a.at || "").localeCompare(b.at || "")).map((n) => (
+                <li key={n.id} className="px-4 md:px-6 py-3">
+                  <div className="flex items-baseline justify-between gap-2 flex-wrap text-[10px] uppercase tracking-wider text-stone-500">
+                    <span className="font-mono font-medium text-stone-600">
+                      Note · <span className="text-stone-500 normal-case font-display italic">{n.actor || "—"}</span>
+                    </span>
+                    <span className="font-mono text-stone-400 normal-case">{fmtTime(n.at)}</span>
+                  </div>
+                  {n.text && (
+                    <p className="text-sm text-stone-800 mt-1.5 leading-relaxed whitespace-pre-wrap">{n.text}</p>
+                  )}
+                  {n.attachment && (
+                    <div className="mt-2 flex items-center gap-3">
+                      {isImageAttachment(n.attachment) ? (
+                        <a
+                          href={n.attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-14 h-14 rounded-md bg-stone-100 border border-stone-200 overflow-hidden hover:border-stone-400"
+                        >
+                          <img src={n.attachment.url} alt="" className="w-full h-full object-cover" />
+                        </a>
+                      ) : (
+                        <div className="w-10 h-12 bg-stone-200 rounded-sm flex items-center justify-center text-stone-600 flex-shrink-0">
+                          <FileIcon className="w-4 h-4" />
+                        </div>
+                      )}
+                      <a
+                        href={n.attachment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-stone-700 hover:underline truncate flex-1 min-w-0"
+                      >
+                        {n.attachment.name}
+                      </a>
+                      <a
+                        href={n.attachment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={n.attachment.name}
+                        className="p-1.5 hover:bg-stone-100 rounded text-stone-500"
+                        title="Download"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  )}
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={() => removeNote(n.id)}
+                      className="text-[10px] text-stone-400 hover:text-red-600 uppercase tracking-wider"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          <div className="px-4 md:px-6 py-4 border-t border-stone-200 space-y-2">
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              rows={3}
+              placeholder="Walkthrough summary, conditions, follow-ups, anything to capture…"
+              className="w-full bg-stone-50 border border-stone-200 rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:border-stone-400"
+            />
+            {pendingAttachment && (
+              <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-md px-3 py-2">
+                {isImageAttachment(pendingAttachment) ? (
+                  <ImageIcon className="w-4 h-4 text-stone-500 flex-shrink-0" />
+                ) : (
+                  <FileIcon className="w-4 h-4 text-stone-500 flex-shrink-0" />
+                )}
+                <span className="text-sm text-stone-700 truncate flex-1 min-w-0">{pendingAttachment.name}</span>
+                <button
+                  onClick={clearPendingAttachment}
+                  className="p-1 hover:bg-stone-200 rounded text-stone-500"
+                  title="Remove attachment"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+            {noteError && (
+              <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                {noteError}
+              </div>
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                ref={noteFileRef}
+                type="file"
+                accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) pickNoteAttachment(f);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => noteFileRef.current?.click()}
+                disabled={attachmentUploading || !user || !!pendingAttachment}
+                className="text-xs font-medium px-3 py-2 rounded-md border border-stone-300 hover:bg-stone-50 text-stone-700 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {attachmentUploading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…
+                  </>
+                ) : (
+                  <>
+                    <Paperclip className="w-3.5 h-3.5" /> Attach file
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={postNote}
+                disabled={(!noteDraft.trim() && !pendingAttachment) || attachmentUploading}
+                className="ml-auto bg-stone-900 hover:bg-stone-800 disabled:bg-stone-300 text-white text-xs font-medium px-3 py-2 rounded-md flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" /> Post note
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

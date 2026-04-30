@@ -434,6 +434,64 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
         </div>
       </div>
 
+      {(report.notes && report.notes.length > 0) && (
+        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+          <div className="px-4 md:px-6 py-3 md:py-4 border-b border-stone-200">
+            <h3 className="font-display text-lg font-semibold">Inspection Notes</h3>
+            <p className="text-xs text-stone-500 mt-0.5">
+              {report.notes.length} note{report.notes.length === 1 ? "" : "s"} from this walkthrough
+            </p>
+          </div>
+          <ol className="divide-y divide-stone-100">
+            {report.notes.slice().sort((a, b) => (a.at || "").localeCompare(b.at || "")).map((n) => {
+              const isImage = (n.attachment?.contentType || "").startsWith("image/")
+                || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(n.attachment?.name || "");
+              return (
+                <li key={n.id} className="px-4 md:px-6 py-3 md:py-3.5">
+                  <div className="flex items-baseline justify-between gap-2 flex-wrap text-[10px] uppercase tracking-wider text-stone-500">
+                    <span className="font-mono font-medium text-stone-600">
+                      Note · <span className="text-stone-500 normal-case font-display italic">{n.actor || "—"}</span>
+                    </span>
+                    <span className="font-mono text-stone-400 normal-case">
+                      {n.at ? new Date(n.at).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
+                    </span>
+                  </div>
+                  {n.text && (
+                    <p className="text-sm text-stone-800 mt-1.5 leading-relaxed whitespace-pre-wrap">{n.text}</p>
+                  )}
+                  {n.attachment && (
+                    <div className="mt-2 flex items-center gap-3">
+                      {isImage ? (
+                        <a
+                          href={n.attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-14 h-14 md:w-16 md:h-16 rounded-md bg-stone-100 border border-stone-200 overflow-hidden hover:border-stone-400"
+                        >
+                          <img src={n.attachment.url} alt="" className="w-full h-full object-cover" />
+                        </a>
+                      ) : (
+                        <div className="w-10 h-12 bg-stone-200 rounded-sm flex items-center justify-center text-stone-600 flex-shrink-0">
+                          <span className="text-[9px] font-mono uppercase">PDF</span>
+                        </div>
+                      )}
+                      <a
+                        href={n.attachment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-stone-700 hover:underline truncate flex-1 min-w-0"
+                      >
+                        {n.attachment.name}
+                      </a>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+
       {lightbox !== null && allPhotos.length > 0 && (
         <PhotoLightbox photos={allPhotos} startIndex={lightbox} onClose={() => setLightbox(null)} />
       )}

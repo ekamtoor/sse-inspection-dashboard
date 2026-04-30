@@ -75,6 +75,25 @@ async function preloadPhotos(report) {
   return out;
 }
 
+// Pre-load any image attachments hanging off inspection notes so we can embed
+// them in the Notes section. Non-image attachments are referenced by name only.
+async function preloadNoteAttachments(report) {
+  const out = {};
+  for (const n of report.notes || []) {
+    const att = n?.attachment;
+    if (!att?.url) continue;
+    const looksLikeImage = (att.contentType || "").startsWith("image/")
+      || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(att.name || "");
+    if (!looksLikeImage) continue;
+    try {
+      out[n.id] = await loadAsDataUrl(att.url);
+    } catch (err) {
+      console.warn("Skipping note attachment in PDF:", err);
+    }
+  }
+  return out;
+}
+
 // Logo loaded as PNG to preserve any transparent background.
 async function loadBrandLogo() {
   try {
@@ -142,9 +161,10 @@ function deriveSummary(report) {
 }
 
 export async function generateReportPDF({ report, site }) {
-  const [photoCache, brandLogo] = await Promise.all([
+  const [photoCache, brandLogo, noteImageCache] = await Promise.all([
     preloadPhotos(report),
     loadBrandLogo(),
+    preloadNoteAttachments(report),
   ]);
 
   const summary = deriveSummary(report);
@@ -530,6 +550,84 @@ export async function generateReportPDF({ report, site }) {
     }
 
     y += 4;
+  }
+
+  // ---- Inspection-level notes ----
+  const notes = (report.notes || []).slice().sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+  if (notes.length > 0) {
+    y += 2;
+    ensureSpace(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(12);
+    setText(pdf, COLOR.ink);
+    pdf.text("Inspection Notes", M, y + 4);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    setText(pdf, COLOR.muted);
+    pdf.text(`${notes.length} entr${notes.length === 1 ? "y" : "ies"}`, M + pdf.getTextWidth("Inspection Notes") + 3, y + 4);
+    y += 9;
+
+    for (const n of notes) {
+      const headerLine = `${(n.actor || "—")}  ·  ${n.at ? new Date(n.at).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}`;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9.5);
+      const textLines = n.text ? pdf.splitTextToSize(n.text, CONTENT_W - 6) : [];
+      const noteImage = noteImageCache[n.id];
+      const attachmentLine = n.attachment ? `Attachment: ${n.attachment.name}` : null;
+      const attachmentLineH = attachmentLine ? 4 : 0;
+      const imageH = noteImage ? 30 : 0;
+      const blockH =
+        4 + // header line
+        2 +
+        (textLines.length > 0 ? textLines.length * 4.6 + 2 : 0) +
+        (imageH > 0 ? imageH + 3 : 0) +
+        (attachmentLineH > 0 ? attachmentLineH + 1 : 0) +
+        4;
+
+      ensureSpace(blockH + 2);
+
+      // Subtle card background
+      setFill(pdf, COLOR.surface);
+      setDraw(pdf, COLOR.faint);
+      pdf.setLineWidth(0.2);
+      pdf.roundedRect(M, y, CONTENT_W, blockH, 1.5, 1.5, "FD");
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7);
+      setText(pdf, COLOR.muted);
+      pdf.text("NOTE", M + 3, y + 4);
+      pdf.setFont("helvetica", "normal");
+      setText(pdf, COLOR.muted);
+      pdf.text(headerLine, M + 3 + pdf.getTextWidth("NOTE") + 3, y + 4);
+
+      let cursorY = y + 7;
+      if (textLines.length > 0) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9.5);
+        setText(pdf, COLOR.ink);
+        pdf.text(textLines, M + 3, cursorY + 3);
+        cursorY += textLines.length * 4.6 + 1;
+      }
+      if (noteImage?.dataUrl) {
+        try {
+          const aspect = noteImage.w / noteImage.h;
+          const tw = imageH * aspect;
+          pdf.addImage(noteImage.dataUrl, "JPEG", M + 3, cursorY + 1, Math.min(tw, CONTENT_W - 6), imageH, undefined, "FAST");
+          cursorY += imageH + 2;
+        } catch (err) {
+          console.warn("Skipping note image embed:", err);
+        }
+      }
+      if (attachmentLine && !noteImage) {
+        pdf.setFont("helvetica", "italic");
+        pdf.setFontSize(8.5);
+        setText(pdf, COLOR.stone700);
+        pdf.text(attachmentLine, M + 3, cursorY + 3);
+        cursorY += attachmentLineH + 1;
+      }
+
+      y += blockH + 2;
+    }
   }
 
   // ---- Footer page numbers ----

@@ -149,12 +149,16 @@ function AppShell({ user }) {
     toast("Site updated.");
   };
   const deleteSite = (siteId) => {
-    // Best-effort cleanup of any photos in Storage that belonged to this
-    // site's reports, before we drop the rows that reference their paths.
+    // Best-effort cleanup of any photos and note attachments in Storage that
+    // belonged to this site's reports, before we drop the rows that reference
+    // their paths.
     for (const r of completed || []) {
       if (r.siteId !== siteId) continue;
       for (const list of Object.values(r.photos || {})) {
         for (const p of list || []) if (p?.path) deletePhoto(p.path);
+      }
+      for (const n of r.notes || []) {
+        if (n?.attachment?.path) deletePhoto(n.attachment.path);
       }
     }
 
@@ -261,6 +265,7 @@ function AppShell({ user }) {
       failReasons: score.failReasons,
       pumpPositions: activeInspection.pumpPositions
         ?? (Number(activeInspection.site?.pumps) || 0),
+      notes: activeInspection.notes || [],
       answers,
       comments,
       photos: activeInspection.photos || {},
@@ -405,6 +410,11 @@ function AppShell({ user }) {
         for (const p of list || []) {
           if (p?.path) deletePhoto(p.path);
         }
+      }
+    }
+    if (target?.notes) {
+      for (const n of target.notes) {
+        if (n?.attachment?.path) deletePhoto(n.attachment.path);
       }
     }
     setCompleted((prev) => (prev || []).filter((r) => r.id !== reportId));
@@ -568,6 +578,7 @@ function AppShell({ user }) {
               onLeave={leaveInspection}
               onDiscard={cancelInspection}
               user={user}
+              inspectorName={resolveInspectorName()}
             />
           )}
 
