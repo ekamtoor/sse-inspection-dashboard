@@ -73,6 +73,9 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
   const ztFailed = SCHEMA.filter((s) => s.zeroTolerance)
     .flatMap((sec) => sec.items.filter((it) => inspection.answers[it.id] === "fail")).length;
   const pct = (score.answered / score.totalItems) * 100;
+  const livePassing = score.answered > 0 && score.passed;
+  const liveFailing = score.answered > 0 && !score.passed;
+  const percentLabel = score.answered > 0 ? `${Math.round(score.percentage * 100)}%` : "—";
 
   return (
     <div className="flex flex-col">
@@ -89,7 +92,7 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
             </button>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{inspection.site?.name}</div>
-              <div className="text-[11px] text-stone-500">Pre-Inspection · auto-saving</div>
+              <div className="text-[11px] text-stone-500">Inspection · auto-saving</div>
             </div>
             <button
               onClick={onDiscard}
@@ -106,10 +109,17 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
               <FileText className="w-3.5 h-3.5" /> Submit
             </button>
           </div>
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-2 text-xs flex-wrap">
             <span className="font-mono">
-              <b className="text-base text-stone-900">{score.earned}</b><span className="text-stone-400">/{score.total}</span>
+              <b className="text-base text-stone-900">{score.earned}</b><span className="text-stone-400">/{score.effectiveTotal}</span>
             </span>
+            <span className="font-mono text-stone-500">{percentLabel}</span>
+            {livePassing && (
+              <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Pass</span>
+            )}
+            {liveFailing && (
+              <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-red-600 text-white rounded font-bold">Fail</span>
+            )}
             <span className="text-stone-300">·</span>
             <span className="font-mono"><b>{score.answered}</b>/{score.totalItems}</span>
             {failed.length > 0 && (
@@ -148,8 +158,17 @@ export default function InspectionView({ inspection, setInspection, onComplete, 
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-stone-500 font-medium">Live Score</div>
-                <div className="font-mono text-xl font-semibold mt-0.5">
-                  {score.earned}<span className="text-stone-400 text-sm">/{score.total}</span>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <span className="font-mono text-xl font-semibold">
+                    {score.earned}<span className="text-stone-400 text-sm">/{score.effectiveTotal}</span>
+                  </span>
+                  <span className="font-mono text-xs text-stone-500">{percentLabel}</span>
+                  {livePassing && (
+                    <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Pass</span>
+                  )}
+                  {liveFailing && (
+                    <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-red-600 text-white rounded font-bold">Fail</span>
+                  )}
                 </div>
               </div>
               <div>

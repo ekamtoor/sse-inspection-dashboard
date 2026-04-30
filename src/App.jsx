@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "./lib/supabase.js";
 import { DataProvider, useDataContext, useUserDataKey } from "./hooks/useUserData.jsx";
 import LoginScreen from "./components/auth/LoginScreen.jsx";
-import { SCHEMA } from "./data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE } from "./data/schema.js";
 import { computeScore } from "./lib/scoring.js";
 import { deletePhoto } from "./lib/photos.js";
 
@@ -21,7 +21,6 @@ import SiteDetailView from "./components/sites/SiteDetailView.jsx";
 import SiteFormModal from "./components/sites/SiteFormModal.jsx";
 import ScheduleView from "./components/schedule/ScheduleView.jsx";
 import InspectionView from "./components/inspection/InspectionView.jsx";
-import InternalOpsView from "./components/internal-ops/InternalOpsView.jsx";
 import ReportsView from "./components/reports/ReportsView.jsx";
 import CorporateView from "./components/corporate/CorporateView.jsx";
 import CorporateForm from "./components/corporate/CorporateForm.jsx";
@@ -68,13 +67,10 @@ function AppShell({ user }) {
   const [issues, setIssues]                   = useUserDataKey("issues");
   const [completed, setCompleted]             = useUserDataKey("reports");
   const [corporate, setCorporate]             = useUserDataKey("corporate");
-  const [internalAudits, setInternalAudits]   = useUserDataKey("internal_audits");
-
   const [inspectors, setInspectors]           = useUserDataKey("inspectors");
 
   const [view, setViewRaw] = useUserDataKey("view");
   const [activeInspection, setActiveInspection] = useUserDataKey("active_inspection");
-  const [activeInternal,   setActiveInternal]   = useUserDataKey("active_internal");
   const [issueDetail,  setIssueDetail]  = useState(null);
   const [showInspectorForm, setShowInspectorForm] = useState(false);
   const [editingInspector,  setEditingInspector]  = useState(null);
@@ -142,12 +138,8 @@ function AppShell({ user }) {
       setIssues(remap);
       setCompleted(remap);
       setCorporate(remap);
-      setInternalAudits(remap);
       if (activeInspection?.siteId === originalId) {
         setActiveInspection({ ...activeInspection, siteId: newId });
-      }
-      if (activeInternal?.siteId === originalId) {
-        setActiveInternal({ ...activeInternal, siteId: newId });
       }
       if (siteDetailId === originalId) setSiteDetailId(newId);
     }
@@ -158,31 +150,21 @@ function AppShell({ user }) {
   };
   const deleteSite = (siteId) => {
     // Best-effort cleanup of any photos in Storage that belonged to this
-    // site's reports and ops audits, before we drop the rows that reference
-    // their paths.
-    const purgePhotosFrom = (records) => {
-      for (const r of records || []) {
-        if (r.siteId !== siteId) continue;
-        const photoMap = r.photos || {};
-        for (const list of Object.values(photoMap)) {
-          for (const p of list || []) {
-            if (p?.path) deletePhoto(p.path);
-          }
-        }
+    // site's reports, before we drop the rows that reference their paths.
+    for (const r of completed || []) {
+      if (r.siteId !== siteId) continue;
+      for (const list of Object.values(r.photos || {})) {
+        for (const p of list || []) if (p?.path) deletePhoto(p.path);
       }
-    };
-    purgePhotosFrom(completed);
-    purgePhotosFrom(internalAudits);
+    }
 
     setSites((prev) => (prev || []).filter((s) => s.id !== siteId));
     setScheduled((prev) => (prev || []).filter((s) => s.siteId !== siteId));
     setIssues((prev) => (prev || []).filter((i) => i.siteId !== siteId));
     setCompleted((prev) => (prev || []).filter((r) => r.siteId !== siteId));
     setCorporate((prev) => (prev || []).filter((c) => c.siteId !== siteId));
-    setInternalAudits((prev) => (prev || []).filter((a) => a.siteId !== siteId));
 
     if (activeInspection?.siteId === siteId) setActiveInspection(null);
-    if (activeInternal?.siteId === siteId) setActiveInternal(null);
     if (reportDetail?.siteId === siteId) setReportDetail(null);
     if (corpDetail?.siteId === siteId) setCorpDetail(null);
 
@@ -205,7 +187,7 @@ function AppShell({ user }) {
       setConfirmDialog({
         title: "Discard in-progress walkthrough?",
         message:
-          "Another pre-inspection is already in progress. Starting a new one will discard the current answers and comments.",
+          "Another inspection is already in progress. Starting a new one will discard the current answers and comments.",
         confirmLabel: "Discard and start new",
         onConfirm: () => {
           setActiveInspection({
@@ -235,6 +217,7 @@ function AppShell({ user }) {
     });
     navigate("inspection");
   };
+
   const resolveInspectorName = () => {
     if (activeInspection?.scheduleId) {
       const sched = (scheduled || []).find((s) => s.id === activeInspection.scheduleId);
@@ -248,19 +231,19 @@ function AppShell({ user }) {
 
   const completeInspection = () => {
     if (!activeInspection) return;
-    const score = computeScore(activeInspection.answers);
+    const answers = activeInspection.answers || {};
+    const comments = activeInspection.comments || {};
+    const score = computeScore(answers);
     const fails = SCHEMA.flatMap((sec) =>
       sec.items
-        .filter((it) => activeInspection.answers[it.id] === "fail")
+        .filter((it) => answers[it.id] === "fail")
         .map((it) => ({
           ...it,
-          comment: activeInspection.comments[it.id] || "",
+          comment: comments[it.id] || "",
           severity: sec.zeroTolerance ? "critical" : sec.critical ? "high" : "medium",
         }))
     );
-    const ztFails = SCHEMA.filter((s) => s.zeroTolerance)
-      .flatMap((sec) => sec.items.filter((it) => activeInspection.answers[it.id] === "fail")).length;
-
+    const ztFails = score.failedZTItems;
     const inspectorName = resolveInspectorName();
 
     const report = {
@@ -270,9 +253,14 @@ function AppShell({ user }) {
       inspector: inspectorName,
       score: score.earned,
       total: score.total,
-      answers: activeInspection.answers,
-      comments: activeInspection.comments,
-      photos: activeInspection.photos,
+      effectiveTotal: score.effectiveTotal,
+      naPoints: score.naPoints,
+      percentage: score.percentage,
+      passed: score.passed,
+      failReasons: score.failReasons,
+      answers,
+      comments,
+      photos: activeInspection.photos || {},
       fails,
     };
     setCompleted((prev) => [report, ...(prev || [])]);
@@ -284,8 +272,7 @@ function AppShell({ user }) {
               ...s,
               lastScore: score.earned,
               lastInspection: new Date().toISOString().slice(0, 10),
-              status:
-                score.earned >= 100 ? "good" : score.earned >= 90 ? "needs-attention" : "critical",
+              status: score.passed ? "good" : score.failedZTItems > 0 ? "critical" : "needs-attention",
             }
           : s
       )
@@ -303,8 +290,17 @@ function AppShell({ user }) {
           status: "open",
           opened: new Date().toISOString().slice(0, 10),
           note:
-            (sec?.zeroTolerance ? "[ZERO TOLERANCE] " : "") + (f.comment || "Auto-generated from internal pre-inspection."),
+            (sec?.zeroTolerance ? "[ZERO TOLERANCE] " : "") + (f.comment || "Auto-generated from inspection."),
           assignee: inspectorName,
+          activity: [
+            {
+              id: `EV-${Date.now()}-${f.id}`,
+              type: "created",
+              at: new Date().toISOString(),
+              actor: inspectorName,
+              text: `Auto-created from inspection ${report.id}.`,
+            },
+          ],
         };
       });
       setIssues((prev) => [...newIssues, ...(prev || [])]);
@@ -314,10 +310,11 @@ function AppShell({ user }) {
       setScheduled((prev) => (prev || []).filter((s) => s.id !== activeInspection.scheduleId));
     }
 
+    const verdict = score.passed ? "PASS" : "FAIL";
     toast(
       ztFails > 0
-        ? `Report saved. ⚠ ${ztFails} ZERO-TOLERANCE violation${ztFails > 1 ? "s" : ""} flagged.`
-        : `Report generated. ${fails.length} issue${fails.length === 1 ? "" : "s"} created.`
+        ? `Report saved — ${verdict}. ⚠ ${ztFails} ZERO-TOLERANCE violation${ztFails > 1 ? "s" : ""} flagged.`
+        : `Report saved — ${verdict}. ${fails.length} issue${fails.length === 1 ? "" : "s"} created.`
     );
     setActiveInspection(null);
     setReportDetail(report);
@@ -326,7 +323,7 @@ function AppShell({ user }) {
   const cancelInspection = () => {
     if (!activeInspection) return;
     setConfirmDialog({
-      title: "Discard pre-inspection?",
+      title: "Discard inspection?",
       message: "This permanently deletes your in-progress answers, comments, and photos.",
       confirmLabel: "Discard",
       onConfirm: () => {
@@ -339,81 +336,36 @@ function AppShell({ user }) {
     navigate("dashboard");
   };
 
-  const startInternal = (siteId) => {
-    const site = (sites || []).find((s) => s.id === siteId);
-    if (!site) return;
-    if (activeInternal && activeInternal.siteId === siteId) {
-      navigate("internal");
-      return;
-    }
-    if (activeInternal) {
-      setConfirmDialog({
-        title: "Discard in-progress ops walk?",
-        message:
-          "Another internal walkthrough is already in progress. Starting a new one will discard the current values and comments.",
-        confirmLabel: "Discard and start new",
-        onConfirm: () => {
-          setActiveInternal({
-            id: `OPS-${Date.now()}`,
-            siteId,
-            site,
-            startedAt: new Date().toISOString(),
-            values: {},
-            comments: {},
-            tobacco: [],
-          });
-          navigate("internal");
-        },
-      });
-      return;
-    }
-    setActiveInternal({
-      id: `OPS-${Date.now()}`,
-      siteId,
-      site,
-      startedAt: new Date().toISOString(),
-      values: {},
-      comments: {},
-      photos: {},
-      tobacco: [],
-    });
-    navigate("internal");
-  };
-  const completeInternal = () => {
-    if (!activeInternal) return;
-    const audit = { ...activeInternal, completedAt: new Date().toISOString() };
-    setInternalAudits((prev) => [audit, ...(prev || [])]);
-    toast("Internal ops walk archived.");
-    setActiveInternal(null);
-    navigate("dashboard");
-  };
-  const cancelInternal = () => {
-    if (!activeInternal) return;
-    setConfirmDialog({
-      title: "Discard ops walk?",
-      message: "This permanently deletes your in-progress values, comments, and photos.",
-      confirmLabel: "Discard",
-      onConfirm: () => {
-        setActiveInternal(null);
-        navigate("dashboard");
-      },
-    });
-  };
-  const leaveInternal = () => {
-    navigate("dashboard");
-  };
-
   const updateIssue = (issue) => {
     setIssues((prev) => (prev || []).map((i) => (i.id === issue.id ? issue : i)));
     toast("Issue updated.");
   };
   const addIssue = (form) => {
-    const entry = { id: `ISS-${Date.now()}`, ...form };
+    const inspectorName = resolveInspectorName();
+    const entry = {
+      id: `ISS-${Date.now()}`,
+      activity: [
+        {
+          id: `EV-${Date.now()}-create`,
+          type: "created",
+          at: new Date().toISOString(),
+          actor: inspectorName,
+          text: "Issue created.",
+        },
+      ],
+      ...form,
+    };
     setIssues((prev) => [entry, ...(prev || [])]);
     setShowIssueForm(false);
     toast("Issue added.");
   };
   const deleteIssue = (id) => {
+    const target = (issues || []).find((i) => i.id === id);
+    if (target?.activity) {
+      for (const ev of target.activity) {
+        if (ev.attachment?.path) deletePhoto(ev.attachment.path);
+      }
+    }
     setIssues((prev) => (prev || []).filter((i) => i.id !== id));
     setIssueDetail(null);
     toast("Issue deleted.");
@@ -529,32 +481,24 @@ function AppShell({ user }) {
         view={view}
         setView={navigate}
         activeInspection={activeInspection}
-        activeInternal={activeInternal}
         userEmail={user.email}
         onSignOut={signOut}
       />
 
       <main className="flex-1 flex flex-col min-w-0">
-        <TopBar
-          view={view}
-          activeInspection={activeInspection}
-          activeInternal={activeInternal}
-          siteDetail={siteDetail}
-        />
+        <TopBar view={view} siteDetail={siteDetail} />
 
         <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
           {view === "dashboard" && (
             <Dashboard
               setView={navigate}
               startInspection={startInspection}
-              startInternal={startInternal}
               sites={sitesEnriched}
               scheduled={scheduled || []}
               issues={issues || []}
               completed={completed || []}
               setIssueDetail={setIssueDetail}
               activeInspection={activeInspection}
-              activeInternal={activeInternal}
             />
           )}
 
@@ -562,13 +506,12 @@ function AppShell({ user }) {
             <SitesView
               sites={sitesEnriched}
               startInspection={startInspection}
-              startInternal={startInternal}
               onAdd={() => { setEditingSite(null); setShowSiteForm(true); }}
               onEdit={(s) => { setEditingSite(s); setShowSiteForm(true); }}
               onDelete={(s) =>
                 setConfirmDialog({
                   title: `Delete ${s.name}?`,
-                  message: "Also removes every schedule, issue, report, corporate entry, ops audit, and photo tied to this site. Cannot be undone.",
+                  message: "Also removes every schedule, issue, report, corporate entry, and photo tied to this site. Cannot be undone.",
                   onConfirm: () => deleteSite(s.id),
                 })
               }
@@ -588,12 +531,11 @@ function AppShell({ user }) {
               onDelete={(s) =>
                 setConfirmDialog({
                   title: `Delete ${s.name}?`,
-                  message: "Also removes every schedule, issue, report, corporate entry, ops audit, and photo tied to this site. Cannot be undone.",
+                  message: "Also removes every schedule, issue, report, corporate entry, and photo tied to this site. Cannot be undone.",
                   onConfirm: () => deleteSite(s.id),
                 })
               }
               onStartInspection={startInspection}
-              onStartInternal={startInternal}
               setIssueDetail={setIssueDetail}
               setReportDetail={setReportDetail}
               setCorpDetail={setCorpDetail}
@@ -609,7 +551,6 @@ function AppShell({ user }) {
               addScheduled={addScheduled}
               updateScheduled={updateScheduled}
               startInspection={startInspection}
-              startInternal={startInternal}
               onDelete={deleteScheduled}
             />
           )}
@@ -621,19 +562,6 @@ function AppShell({ user }) {
               onComplete={completeInspection}
               onLeave={leaveInspection}
               onDiscard={cancelInspection}
-              user={user}
-            />
-          )}
-
-          {view === "internal" && (
-            <InternalOpsView
-              audit={activeInternal}
-              setAudit={setActiveInternal}
-              sites={sitesEnriched}
-              onComplete={completeInternal}
-              onLeave={leaveInternal}
-              onDiscard={cancelInternal}
-              startInternal={startInternal}
               user={user}
             />
           )}
@@ -706,7 +634,6 @@ function AppShell({ user }) {
           setView={navigate}
           onMore={() => setMoreOpen(!moreOpen)}
           activeInspection={activeInspection}
-          activeInternal={activeInternal}
           moreOpen={moreOpen}
         />
       </main>
@@ -716,7 +643,6 @@ function AppShell({ user }) {
           view={view}
           setView={navigate}
           activeInspection={activeInspection}
-          activeInternal={activeInternal}
           onClose={() => setMoreOpen(false)}
           userEmail={user.email}
           onSignOut={signOut}
@@ -756,6 +682,8 @@ function AppShell({ user }) {
         <IssueDetailModal
           issue={issueDetail}
           sites={sitesEnriched}
+          user={user}
+          inspectorName={resolveInspectorName()}
           onUpdate={updateIssue}
           onDelete={(iss) =>
             setConfirmDialog({

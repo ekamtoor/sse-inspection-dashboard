@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { CheckCircle2, XCircle, Camera, X, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, MinusCircle, Camera, X, Loader2 } from "lucide-react";
 
 export default function ItemRow({
   item, answer, comment, photoList, uploadingCount,
@@ -41,6 +41,16 @@ export default function ItemRow({
               }`}
             >
               <XCircle className="w-3.5 h-3.5" /> Fail
+            </button>
+            <button
+              onClick={() => setAnswer("na")}
+              className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 flex-1 md:flex-initial justify-center ${
+                answer === "na"
+                  ? "bg-stone-700 text-white shadow-sm"
+                  : "bg-stone-50 text-stone-600 hover:bg-stone-100 hover:text-stone-900 border border-stone-200"
+              }`}
+            >
+              <MinusCircle className="w-3.5 h-3.5" /> N/A
             </button>
             {item.pts > 0 && <span className="ml-1 font-mono text-[10px] text-stone-400 flex-shrink-0">+{item.pts}</span>}
           </div>

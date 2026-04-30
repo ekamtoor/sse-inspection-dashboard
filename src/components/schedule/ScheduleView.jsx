@@ -13,12 +13,11 @@ function emptyForm(sites, inspectors) {
     time: "08:00",
     inspector: defaultInspectorName(inspectors),
     type: "Full Audit",
-    kind: "preinspect",
   };
 }
 
 export default function ScheduleView({
-  sites, scheduled, inspectors, addScheduled, updateScheduled, startInspection, startInternal, onDelete,
+  sites, scheduled, inspectors, addScheduled, updateScheduled, startInspection, onDelete,
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -42,7 +41,6 @@ export default function ScheduleView({
       time: entry.time,
       inspector: entry.inspector || defaultInspectorName(inspectorList),
       type: entry.type,
-      kind: entry.kind,
     });
     setShowForm(true);
     if (typeof window !== "undefined") {
@@ -61,14 +59,12 @@ export default function ScheduleView({
       updateScheduled({ id: editingId, ...form });
       setShowForm(false);
       setEditingId(null);
-      if (start) {
-        form.kind === "internal" ? startInternal(form.siteId) : startInspection(form.siteId, editingId);
-      }
+      if (start) startInspection(form.siteId, editingId);
       return;
     }
     const e = addScheduled(form);
     setShowForm(false);
-    if (start) form.kind === "internal" ? startInternal(form.siteId) : startInspection(form.siteId, e.id);
+    if (start) startInspection(form.siteId, e.id);
   };
 
   const sorted = scheduled.slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
@@ -77,7 +73,7 @@ export default function ScheduleView({
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-stone-600 max-w-xl flex-1 min-w-0 hidden md:block">
-          Book pre-inspections internally — typically <span className="italic font-display">7–10 days</span> before a corporate window.
+          Book inspections internally — typically <span className="italic font-display">7–10 days</span> before a corporate window.
         </p>
         <button
           onClick={() => (showForm && !editingId ? cancel() : beginAdd())}
@@ -93,12 +89,6 @@ export default function ScheduleView({
             {editingId ? "Edit Inspection" : "New Inspection"}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-            <Field label="Audit kind">
-              <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} className="w-full bg-stone-50 border border-stone-200 rounded-md px-3 py-2 text-sm">
-                <option value="preinspect">Pre-Inspection (Mystery Shop simulation)</option>
-                <option value="internal">Internal Ops (Owner walkthrough)</option>
-              </select>
-            </Field>
             <Field label="Site">
               <select value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })} className="w-full bg-stone-50 border border-stone-200 rounded-md px-3 py-2 text-sm">
                 {sites.map((s) => (
@@ -108,17 +98,13 @@ export default function ScheduleView({
             </Field>
             <Field label="Type">
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="w-full bg-stone-50 border border-stone-200 rounded-md px-3 py-2 text-sm">
-                {form.kind === "preinspect" ? (
-                  <>
-                    <option>Full Audit</option><option>Image Essentials Only</option><option>Pump Sweep</option>
-                    <option>Pre-Corporate</option><option>Brand Standards</option>
-                  </>
-                ) : (
-                  <>
-                    <option>Daily Ops</option><option>Weekly Walk</option><option>Tobacco Audit</option>
-                    <option>Cooler / Freezer Check</option><option>Cash Reconciliation</option>
-                  </>
-                )}
+                <option>Full Audit</option>
+                <option>Image Essentials Only</option>
+                <option>Pump Sweep</option>
+                <option>Pre-Corporate</option>
+                <option>Brand Standards</option>
+                <option>Daily Ops</option>
+                <option>Weekly Walk</option>
               </select>
             </Field>
             <Field label="Inspector">
@@ -181,7 +167,6 @@ export default function ScheduleView({
             <tr className="text-left">
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">When</th>
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Site</th>
-              <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Kind</th>
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Type</th>
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Inspector</th>
               <th className="px-6 py-3"></th>
@@ -202,11 +187,6 @@ export default function ScheduleView({
                   <td className="px-6 py-4">
                     <div className="text-sm font-medium">{site?.name}</div>
                     <div className="text-xs text-stone-500">{site?.city}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded ${s.kind === "internal" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}>
-                      {s.kind === "internal" ? "Ops" : "Pre-insp"}
-                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 bg-stone-100 rounded">{s.type}</span>
@@ -236,7 +216,7 @@ export default function ScheduleView({
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => (s.kind === "internal" ? startInternal(s.siteId) : startInspection(s.siteId, s.id))}
+                        onClick={() => startInspection(s.siteId, s.id)}
                         className="text-xs font-medium text-stone-900 hover:underline ml-1"
                       >
                         Start →
@@ -247,7 +227,7 @@ export default function ScheduleView({
               );
             })}
             {sorted.length === 0 && (
-              <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-stone-500">Nothing scheduled.</td></tr>
+              <tr><td colSpan={5} className="px-6 py-12 text-center text-sm text-stone-500">Nothing scheduled.</td></tr>
             )}
           </tbody>
         </table>
@@ -274,13 +254,10 @@ export default function ScheduleView({
                     <div className="text-xs text-stone-500 truncate">{site?.city} · {s.time}</div>
                   </div>
                 </div>
-                <span className={`font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded flex-shrink-0 ${s.kind === "internal" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}>
-                  {s.kind === "internal" ? "Ops" : "Pre-insp"}
-                </span>
+                <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 bg-stone-100 rounded flex-shrink-0">{s.type}</span>
               </div>
               <div className="flex items-center justify-between gap-2 pt-3 border-t border-stone-100">
                 <div className="text-xs text-stone-500 truncate min-w-0 flex items-center gap-1.5 flex-wrap">
-                  <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-stone-100 rounded">{s.type}</span>
                   <span className="truncate">{s.inspector || "—"}</span>
                   {inspectorIsLegacy && (
                     <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-stone-100 text-stone-500 rounded">
@@ -296,7 +273,7 @@ export default function ScheduleView({
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => (s.kind === "internal" ? startInternal(s.siteId) : startInspection(s.siteId, s.id))}
+                    onClick={() => startInspection(s.siteId, s.id)}
                     className="bg-stone-900 text-white text-xs font-medium px-3 py-1.5 rounded-md"
                   >
                     Start

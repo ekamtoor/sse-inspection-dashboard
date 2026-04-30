@@ -1,15 +1,14 @@
 import {
   LayoutDashboard, MapPin, ClipboardCheck, AlertTriangle, FileText, Calendar,
-  Wrench, Archive, Shield, LogOut, Users,
+  Archive, Shield, LogOut, Users,
 } from "lucide-react";
 
-export default function Sidebar({ view, setView, activeInspection, activeInternal, userEmail, onSignOut }) {
+export default function Sidebar({ view, setView, activeInspection, userEmail, onSignOut }) {
   const nav = [
     { id: "dashboard",  label: "Dashboard",         icon: LayoutDashboard },
     { id: "sites",      label: "Sites",             icon: MapPin },
     { id: "schedule",   label: "Schedule",          icon: Calendar },
-    { id: "inspection", label: "Pre-Inspection",    icon: ClipboardCheck, badge: activeInspection ? "live" : null },
-    { id: "internal",   label: "Internal Ops",      icon: Wrench,         badge: activeInternal ? "live" : null },
+    { id: "inspection", label: "Inspection",        icon: ClipboardCheck, badge: activeInspection ? "live" : null },
     { id: "reports",    label: "Reports",           icon: FileText },
     { id: "corporate",  label: "Corporate Archive", icon: Archive },
     { id: "issues",     label: "Issues Tracker",    icon: AlertTriangle },

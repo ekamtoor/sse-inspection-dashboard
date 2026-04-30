@@ -1,20 +1,25 @@
-import { MapPin, Building2, Pencil, Trash2, Wrench, ClipboardCheck } from "lucide-react";
+import { MapPin, Building2, Pencil, Trash2, ClipboardCheck } from "lucide-react";
 
-export default function SiteCard({ site, onStartInspection, onStartInternal, onEdit, onDelete, onView }) {
+export default function SiteCard({ site, onStartInspection, onEdit, onDelete, onView }) {
+  const score = site.lastScore || 0;
   const scoreColor =
-    site.lastScore >= 100 ? "text-emerald-700" :
-    site.lastScore >= 90  ? "text-amber-700"   :
-                            "text-red-600";
+    score >= 170 ? "text-emerald-700" :
+    score >= 140 ? "text-amber-700"   :
+    score > 0    ? "text-red-600"     :
+                   "text-stone-400";
   const statusBg =
     site.status === "good"            ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
     site.status === "needs-attention" ? "bg-amber-50 text-amber-700 border-amber-200"       :
-                                        "bg-red-50 text-red-700 border-red-200";
+    site.status === "critical"        ? "bg-red-50 text-red-700 border-red-200"             :
+                                        "bg-stone-50 text-stone-600 border-stone-200";
   const statusLabel =
-    site.status === "good" ? "Performing" : site.status === "needs-attention" ? "Watch" : "Critical";
-  const dueDate = new Date(site.nextDue);
+    site.status === "good" ? "Performing" :
+    site.status === "needs-attention" ? "Watch" :
+    site.status === "critical" ? "Critical" :
+    "New";
+  const dueDate = site.nextDue ? new Date(site.nextDue) : null;
   const today = new Date();
-  const daysUntil = Math.round((dueDate - today) / (1000 * 60 * 60 * 24));
-  const totalLabel = site.brand.includes("Marathon") ? "100" : "107";
+  const daysUntil = dueDate ? Math.round((dueDate - today) / (1000 * 60 * 60 * 24)) : null;
 
   return (
     <div className="bg-white border border-stone-200 rounded-xl p-4 md:p-5 hover:shadow-sm transition-shadow group">
@@ -63,8 +68,8 @@ export default function SiteCard({ site, onStartInspection, onStartInternal, onE
         <div>
           <div className="text-[9px] md:text-[10px] uppercase tracking-wider text-stone-500 font-medium">Score</div>
           <div className={`font-mono text-xl md:text-2xl font-semibold ${scoreColor} mt-1`}>
-            {site.lastScore || "—"}
-            <span className="text-stone-400 text-xs md:text-sm">/{totalLabel}</span>
+            {score || "—"}
+            <span className="text-stone-400 text-xs md:text-sm">/200</span>
           </div>
         </div>
         <div>
@@ -85,18 +90,15 @@ export default function SiteCard({ site, onStartInspection, onStartInternal, onE
 
       <div className="flex items-center justify-between mt-3 md:mt-4 gap-2 flex-wrap">
         <div className="text-xs text-stone-500">
-          {site.nextDue ? (
+          {dueDate ? (
             <>Due in <span className="font-mono font-semibold text-stone-700">{daysUntil}d</span></>
           ) : (
             "No due date"
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={onStartInternal} className="text-xs font-medium px-3 py-1.5 border border-stone-200 hover:bg-stone-50 text-stone-700 rounded-md flex items-center gap-1.5">
-            <Wrench className="w-3.5 h-3.5" /> Ops
-          </button>
           <button onClick={onStartInspection} className="text-xs font-medium px-3 py-1.5 bg-stone-900 text-white rounded-md hover:bg-stone-800 flex items-center gap-1.5">
-            <ClipboardCheck className="w-3.5 h-3.5" /> Pre-inspect
+            <ClipboardCheck className="w-3.5 h-3.5" /> Inspect
           </button>
         </div>
       </div>

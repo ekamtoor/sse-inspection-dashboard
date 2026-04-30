@@ -1,9 +1,8 @@
-import { ClipboardCheck, Wrench, FileText, Archive, LogOut, Users } from "lucide-react";
+import { ClipboardCheck, FileText, Archive, LogOut, Users } from "lucide-react";
 
-export default function MobileMoreSheet({ view, setView, activeInspection, activeInternal, onClose, userEmail, onSignOut }) {
+export default function MobileMoreSheet({ view, setView, activeInspection, onClose, userEmail, onSignOut }) {
   const items = [
-    { id: "inspection", label: "Pre-Inspection",    icon: ClipboardCheck, badge: activeInspection ? "live" : null },
-    { id: "internal",   label: "Internal Ops",      icon: Wrench,         badge: activeInternal ? "live" : null },
+    { id: "inspection", label: "Inspection",        icon: ClipboardCheck, badge: activeInspection ? "live" : null },
     { id: "reports",    label: "Reports",           icon: FileText },
     { id: "corporate",  label: "Corporate Archive", icon: Archive },
     { id: "inspectors", label: "Inspectors",        icon: Users },

@@ -2,15 +2,17 @@ import { useState } from "react";
 import { Plus, Store } from "lucide-react";
 import SiteCard from "./SiteCard.jsx";
 
-export default function SitesView({ sites, startInspection, startInternal, onAdd, onEdit, onDelete, onView }) {
+export default function SitesView({ sites, startInspection, onAdd, onEdit, onDelete, onView }) {
   const [filter, setFilter] = useState("all");
   const [brand, setBrand] = useState("all");
 
   const filtered = sites.filter(
     (s) =>
       (filter === "all" || s.status === filter) &&
-      (brand === "all" || s.brand.toLowerCase().includes(brand))
+      (brand === "all" || (s.brand || "").toLowerCase().includes(brand))
   );
+
+  const brands = ["all", "shell", "marathon", "arco", "sunoco", "bp", "unbranded"];
 
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
@@ -35,7 +37,7 @@ export default function SitesView({ sites, startInspection, startInternal, onAdd
             </button>
           ))}
           <span className="mx-0.5 text-stone-300">|</span>
-          {["all", "shell", "marathon"].map((b) => (
+          {brands.map((b) => (
             <button
               key={b}
               onClick={() => setBrand(b)}
@@ -45,7 +47,7 @@ export default function SitesView({ sites, startInspection, startInternal, onAdd
                   : "bg-white border border-stone-200 text-stone-700 hover:bg-stone-50"
               }`}
             >
-              {b === "all" ? "All Brands" : b.charAt(0).toUpperCase() + b.slice(1)}
+              {b === "all" ? "All Brands" : b.toUpperCase() === "BP" ? "BP" : b.charAt(0).toUpperCase() + b.slice(1)}
             </button>
           ))}
         </div>
@@ -63,7 +65,6 @@ export default function SitesView({ sites, startInspection, startInternal, onAdd
             key={s.id}
             site={s}
             onStartInspection={() => startInspection(s.id)}
-            onStartInternal={() => startInternal(s.id)}
             onEdit={() => onEdit(s)}
             onDelete={() => onDelete(s)}
             onView={() => onView(s)}

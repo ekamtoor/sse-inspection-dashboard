@@ -8,10 +8,8 @@ const KEYS = [
   "issues",
   "reports",
   "corporate",
-  "internal_audits",
   "inspectors",
   "active_inspection",
-  "active_internal",
   "view",
 ];
 
@@ -21,10 +19,8 @@ const SEEDS = {
   issues: SEED_ISSUES,
   reports: [],
   corporate: SEED_CORPORATE,
-  internal_audits: [],
   inspectors: [],
   active_inspection: null,
-  active_internal: null,
   view: "dashboard",
 };
 
