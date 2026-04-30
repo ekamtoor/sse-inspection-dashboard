@@ -66,7 +66,12 @@ async function preloadPhotos(report) {
     for (const p of list) {
       if (!p?.url) continue;
       try {
-        out[id].push(await loadAsDataUrl(p.url));
+        const result = await loadAsDataUrl(p.url);
+        // Keep the original full-size URL alongside the resized JPEG so the
+        // PDF can link the embedded thumbnail to the high-res image.
+        result.originalUrl = p.url;
+        result.name = p.name;
+        out[id].push(result);
       } catch (err) {
         console.warn("Skipping photo in PDF:", err);
       }
@@ -86,7 +91,10 @@ async function preloadNoteAttachments(report) {
       || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(att.name || "");
     if (!looksLikeImage) continue;
     try {
-      out[n.id] = await loadAsDataUrl(att.url);
+      const result = await loadAsDataUrl(att.url);
+      result.originalUrl = att.url;
+      result.name = att.name;
+      out[n.id] = result;
     } catch (err) {
       console.warn("Skipping note attachment in PDF:", err);
     }
@@ -532,6 +540,12 @@ export async function generateReportPDF({ report, site }) {
           }
           try {
             pdf.addImage(p.dataUrl, "JPEG", cursorX, cursorY + 1, tw, tileH, undefined, "FAST");
+            // Make the embedded thumbnail clickable — opens the full-size
+            // image URL in the PDF viewer's default browser. Works in iOS
+            // Files / Adobe Acrobat / Chrome's PDF viewer.
+            if (p.originalUrl) {
+              pdf.link(cursorX, cursorY + 1, tw, tileH, { url: p.originalUrl });
+            }
           } catch (err) {
             console.warn("Skipping photo embed:", err);
           }
@@ -611,18 +625,27 @@ export async function generateReportPDF({ report, site }) {
       if (noteImage?.dataUrl) {
         try {
           const aspect = noteImage.w / noteImage.h;
-          const tw = imageH * aspect;
-          pdf.addImage(noteImage.dataUrl, "JPEG", M + 3, cursorY + 1, Math.min(tw, CONTENT_W - 6), imageH, undefined, "FAST");
+          const tw = Math.min(imageH * aspect, CONTENT_W - 6);
+          pdf.addImage(noteImage.dataUrl, "JPEG", M + 3, cursorY + 1, tw, imageH, undefined, "FAST");
+          if (noteImage.originalUrl) {
+            pdf.link(M + 3, cursorY + 1, tw, imageH, { url: noteImage.originalUrl });
+          }
           cursorY += imageH + 2;
         } catch (err) {
           console.warn("Skipping note image embed:", err);
         }
       }
+      // For non-image attachments, render the filename as a clickable text
+      // link to the original file (PDF/doc/csv etc).
       if (attachmentLine && !noteImage) {
         pdf.setFont("helvetica", "italic");
         pdf.setFontSize(8.5);
         setText(pdf, COLOR.stone700);
         pdf.text(attachmentLine, M + 3, cursorY + 3);
+        if (n.attachment?.url) {
+          const lineW = pdf.getTextWidth(attachmentLine);
+          pdf.link(M + 3, cursorY + 0.5, lineW, 4, { url: n.attachment.url });
+        }
         cursorY += attachmentLineH + 1;
       }
 

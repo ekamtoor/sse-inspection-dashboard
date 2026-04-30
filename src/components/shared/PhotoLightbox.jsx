@@ -63,14 +63,19 @@ export default function PhotoLightbox({ photos, startIndex = 0, onClose }) {
         </div>
       </div>
 
+      {/* The wrapper has `min-h-0` so flex shrinking actually applies — without
+          it, max-h-full on the <img> resolves against an auto-sized parent and
+          the image renders at its natural pixel size on desktop, leaving only
+          the bottom half visible. `relative` anchors the absolute arrow buttons
+          to this image area instead of the whole viewport. */}
       <div
-        className="flex-1 flex items-center justify-center px-2 md:px-12 pb-4 md:pb-12 select-none"
+        className="relative flex-1 min-h-0 flex items-center justify-center px-2 md:px-16 pb-4 md:pb-8"
         onClick={(e) => e.stopPropagation()}
       >
         {hasPrev && (
           <button
             onClick={() => setIndex((i) => Math.max(i - 1, 0))}
-            className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-white/10 hover:bg-white/20 rounded-full text-white"
+            className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-white/10 hover:bg-white/20 rounded-full text-white z-10"
             title="Previous (←)"
           >
             <ChevronLeft className="w-6 h-6" />
@@ -79,12 +84,13 @@ export default function PhotoLightbox({ photos, startIndex = 0, onClose }) {
         <img
           src={photo.url}
           alt={photo.name || ""}
-          className="max-w-full max-h-full object-contain"
+          className="max-w-full max-h-full object-contain select-none"
+          draggable={false}
         />
         {hasNext && (
           <button
             onClick={() => setIndex((i) => Math.min(i + 1, photos.length - 1))}
-            className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-white/10 hover:bg-white/20 rounded-full text-white"
+            className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-white/10 hover:bg-white/20 rounded-full text-white z-10"
             title="Next (→)"
           >
             <ChevronRight className="w-6 h-6" />
