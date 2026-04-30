@@ -73,7 +73,7 @@ export default function SiteCard({ site, onStartInspection, onEdit, onDelete, on
           </div>
         </div>
         <div>
-          <div className="text-[9px] md:text-[10px] uppercase tracking-wider text-stone-500 font-medium">Positions</div>
+          <div className="text-[9px] md:text-[10px] uppercase tracking-wider text-stone-500 font-medium">Pumps</div>
           <div className="font-mono text-xl md:text-2xl font-semibold mt-1">{site.pumps}</div>
         </div>
         <div>

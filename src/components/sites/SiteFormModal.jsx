@@ -110,7 +110,7 @@ export default function SiteFormModal({ site, onSubmit, onClose }) {
                   <option value="Unbranded">Unbranded</option>
                 </select>
               </Field>
-              <Field label="Fueling positions" required error={errors.pumps}>
+              <Field label="Pumps" required error={errors.pumps}>
                 <input
                   type="number"
                   min="1"
