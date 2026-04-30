@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { SCHEMA } from "../data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE } from "../data/schema.js";
 
 // A4 portrait, mm units. Designed to print or share via OS-level share sheet.
 const PAGE_W = 210;
@@ -18,7 +18,9 @@ const COLOR = {
   redSoft: [254, 226, 226],
   redInk: [127, 29, 29],
   emerald: [16, 185, 129],
+  emeraldSoft: [220, 252, 231],
   stone700: [68, 64, 60],
+  stone200: [231, 229, 228],
 };
 
 function setFill(pdf, [r, g, b]) {
@@ -41,8 +43,6 @@ function loadImage(url) {
   });
 }
 
-// Resize to keep the embedded JPEG small — display size in the PDF is ~25mm,
-// so 600px is plenty of detail and cuts a 1600px source by ~7x in bytes.
 async function loadAsDataUrl(url, maxPx = 600) {
   const img = await loadImage(url);
   const longSide = Math.max(img.naturalWidth, img.naturalHeight);
@@ -56,13 +56,10 @@ async function loadAsDataUrl(url, maxPx = 600) {
   return { dataUrl: canvas.toDataURL("image/jpeg", 0.82), w, h };
 }
 
-// Pre-fetch every photo before rendering so jspdf's sync addImage calls
-// have data ready. Failures are logged and skipped, not fatal.
 async function preloadPhotos(report) {
   const out = {};
   const photoMap = report.photos || {};
-  const ids = Object.keys(photoMap);
-  for (const id of ids) {
+  for (const id of Object.keys(photoMap)) {
     const list = photoMap[id] || [];
     if (list.length === 0) continue;
     out[id] = [];
@@ -78,13 +75,11 @@ async function preloadPhotos(report) {
   return out;
 }
 
-// Best-effort load of the Seven Star Energy logo for the PDF footer.
-// Encodes as PNG to preserve transparency. Returns null if the file isn't
-// present so the renderer falls back to plain text.
+// Logo loaded as PNG to preserve any transparent background.
 async function loadBrandLogo() {
   try {
     const img = await loadImage("/seven-star-logo.png");
-    const maxPx = 200;
+    const maxPx = 400;
     const longSide = Math.max(img.naturalWidth, img.naturalHeight);
     const scale = longSide > maxPx ? maxPx / longSide : 1;
     const w = Math.max(1, Math.round(img.naturalWidth * scale));
@@ -99,11 +94,60 @@ async function loadBrandLogo() {
   }
 }
 
+// Mirrors the verdict logic in lib/scoring.js so old reports without the
+// summary fields still render with a consistent pass/fail badge.
+function deriveSummary(report) {
+  if (typeof report.percentage === "number" && typeof report.passed === "boolean") {
+    return {
+      effectiveTotal: report.effectiveTotal ?? report.total,
+      naPoints: report.naPoints ?? 0,
+      percentage: report.percentage,
+      passed: report.passed,
+      failReasons: report.failReasons || {},
+    };
+  }
+  let earned = 0;
+  let totalConfigured = 0;
+  let naPoints = 0;
+  let failedCriticalItems = 0;
+  let failedZTItems = 0;
+  for (const sec of SCHEMA) {
+    for (const it of sec.items) {
+      totalConfigured += it.pts;
+      const v = report.answers?.[it.id];
+      if (v === "pass") earned += it.pts;
+      else if (v === "na") naPoints += it.pts;
+      else if (v === "fail") {
+        if (sec.critical) failedCriticalItems += 1;
+        if (sec.zeroTolerance) failedZTItems += 1;
+      }
+    }
+  }
+  const usedTotal = totalConfigured > 0 ? totalConfigured : (report.total || 0);
+  const effectiveTotal = Math.max(usedTotal - naPoints, 0);
+  const computedEarned = earned > 0 ? earned : (report.score || 0);
+  const percentage = effectiveTotal > 0 ? computedEarned / effectiveTotal : 0;
+  const failReasons = {
+    critical: failedCriticalItems > 0,
+    zeroTolerance: failedZTItems > 0,
+    percentage: percentage < PASSING_PERCENTAGE,
+  };
+  return {
+    effectiveTotal,
+    naPoints,
+    percentage,
+    passed: !failReasons.critical && !failReasons.zeroTolerance && !failReasons.percentage,
+    failReasons,
+  };
+}
+
 export async function generateReportPDF({ report, site }) {
   const [photoCache, brandLogo] = await Promise.all([
     preloadPhotos(report),
     loadBrandLogo(),
   ]);
+
+  const summary = deriveSummary(report);
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   let y = M;
@@ -117,12 +161,24 @@ export async function generateReportPDF({ report, site }) {
 
   // ---- Header band ----
   setFill(pdf, COLOR.ink);
-  pdf.rect(0, 0, PAGE_W, 54, "F");
+  pdf.rect(0, 0, PAGE_W, 58, "F");
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(9);
   setText(pdf, COLOR.amber);
-  pdf.text("PRE-INSPECTION REPORT", M, M + 2);
+  pdf.text("INSPECTION REPORT", M, M + 2);
+
+  // Pass/fail pill next to the section eyebrow
+  const verdict = summary.passed ? "PASS" : "FAIL";
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8);
+  const verdictW = pdf.getTextWidth(verdict);
+  const verdictPillW = verdictW + 5;
+  const verdictPillX = M + pdf.getTextWidth("INSPECTION REPORT") + 4;
+  setFill(pdf, summary.passed ? COLOR.emerald : COLOR.red);
+  pdf.roundedRect(verdictPillX, M - 2.5, verdictPillW, 4.6, 0.8, 0.8, "F");
+  setText(pdf, [255, 255, 255]);
+  pdf.text(verdict, verdictPillX + 2.5, M + 1);
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(20);
@@ -134,6 +190,32 @@ export async function generateReportPDF({ report, site }) {
   setText(pdf, [180, 175, 170]);
   const subtitle = [site?.city, site?.brand].filter(Boolean).join(" · ");
   if (subtitle) pdf.text(subtitle, M, M + 17);
+
+  // SSE logo on a small white card in the top-right of the dark band.
+  if (brandLogo?.dataUrl) {
+    try {
+      const aspect = brandLogo.w / brandLogo.h;
+      const cardH = 22;
+      const cardW = cardH * aspect + 4; // padding around the mark
+      const cardX = PAGE_W - M - cardW;
+      const cardY = 6;
+      // White background card so the colored logo reads cleanly on the dark band.
+      setFill(pdf, [255, 255, 255]);
+      pdf.roundedRect(cardX, cardY, cardW, cardH, 1.2, 1.2, "F");
+      pdf.addImage(
+        brandLogo.dataUrl,
+        "PNG",
+        cardX + 2,
+        cardY + 2,
+        cardW - 4,
+        cardH - 4,
+        undefined,
+        "FAST"
+      );
+    } catch {
+      // ignore logo embed failures
+    }
+  }
 
   // Score / inspector / flags row
   const completedDate = new Date(report.completedAt);
@@ -147,8 +229,8 @@ export async function generateReportPDF({ report, site }) {
     minute: "2-digit",
   });
 
-  const labelY = M + 26;
-  const valueY = M + 34;
+  const labelY = M + 28;
+  const valueY = M + 36;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(7);
   setText(pdf, COLOR.amber);
@@ -160,53 +242,55 @@ export async function generateReportPDF({ report, site }) {
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(14);
   setText(pdf, [255, 255, 255]);
-  pdf.text(`${report.score}/${report.total}`, M, valueY);
+  const denom = summary.effectiveTotal || report.total;
+  pdf.text(`${report.score}/${denom}`, M, valueY);
+  pdf.setFontSize(8);
+  setText(pdf, [180, 175, 170]);
+  pdf.text(`${Math.round(summary.percentage * 100)}%`, M, valueY + 4);
+
+  pdf.setFont("helvetica", "bold");
   pdf.setFontSize(11);
+  setText(pdf, [255, 255, 255]);
   pdf.text(report.inspector || "Inspector", M + 50, valueY);
+  const failsCount = report.fails?.length || 0;
   pdf.setFontSize(14);
-  setText(
-    pdf,
-    report.fails.length > 0 ? COLOR.red : [120, 120, 120]
-  );
-  pdf.text(`${report.fails.length}`, M + 100, valueY);
+  setText(pdf, failsCount > 0 ? COLOR.red : [120, 120, 120]);
+  pdf.text(`${failsCount}`, M + 100, valueY);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
   setText(pdf, [180, 175, 170]);
   pdf.text(`${dateStr} · ${timeStr}`, M + 130, valueY);
 
-  y = 62;
+  y = 66;
 
-  // ---- Cover-page brand stamp ----
-  if (brandLogo?.dataUrl) {
-    try {
-      const aspect = brandLogo.w / brandLogo.h;
-      const stampH = 18;
-      const stampW = stampH * aspect;
-      const stampX = PAGE_W - M - stampW;
-      const stampY = y;
-      pdf.addImage(
-        brandLogo.dataUrl,
-        "PNG",
-        stampX,
-        stampY,
-        stampW,
-        stampH,
-        undefined,
-        "FAST"
-      );
-      pdf.setFont("helvetica", "italic");
-      pdf.setFontSize(8);
-      setText(pdf, COLOR.muted);
-      const caption = "Prepared by Seven Star Energy";
-      pdf.text(caption, stampX + stampW - pdf.getTextWidth(caption), stampY + stampH + 3.2);
-      y += stampH + 8;
-    } catch {
-      // ignore logo embed failures
+  // ---- Pass-fail rationale (when failed) ----
+  if (!summary.passed) {
+    const reasons = [];
+    if (summary.failReasons.zeroTolerance) reasons.push("Zero-tolerance violation flagged");
+    if (summary.failReasons.critical) reasons.push("Image or Service Essentials item failed");
+    if (summary.failReasons.percentage) reasons.push(`Score below ${Math.round(PASSING_PERCENTAGE * 100)}%`);
+    if (reasons.length > 0) {
+      ensureSpace(8 + reasons.length * 4.5);
+      setFill(pdf, COLOR.redSoft);
+      setDraw(pdf, COLOR.red);
+      pdf.setLineWidth(0.4);
+      const boxH = 6 + reasons.length * 4.4;
+      pdf.roundedRect(M, y, CONTENT_W, boxH, 2, 2, "FD");
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10);
+      setText(pdf, COLOR.redInk);
+      pdf.text("Did not pass", M + 4, y + 5);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      reasons.forEach((r, i) => {
+        pdf.text(`• ${r}`, M + 4, y + 5 + (i + 1) * 4.4);
+      });
+      y += boxH + 5;
     }
   }
 
   // ---- ZT violation banner ----
-  const ztFails = report.fails.filter((f) => {
+  const ztFails = (report.fails || []).filter((f) => {
     const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
     return sec?.zeroTolerance;
   });
@@ -240,9 +324,11 @@ export async function generateReportPDF({ report, site }) {
 
   for (const sec of SCHEMA) {
     const items = sec.items;
-    const earned = items.reduce((a, it) => a + (report.answers[it.id] === "pass" ? it.pts : 0), 0);
+    const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
     const total = items.reduce((a, it) => a + it.pts, 0);
-    const fails = items.filter((it) => report.answers[it.id] === "fail").length;
+    const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
+    const fails = items.filter((it) => report.answers?.[it.id] === "fail").length;
+    const effective = total - naPts;
     if (total === 0 && fails === 0) continue;
 
     ensureSpace(11);
@@ -254,28 +340,24 @@ export async function generateReportPDF({ report, site }) {
 
     pdf.setFont("helvetica", "normal");
     setText(pdf, COLOR.muted);
-    if (total > 0) {
-      const scoreText = `${earned}/${total}`;
-      const w = pdf.getTextWidth(scoreText);
-      pdf.text(scoreText, PAGE_W - M - w, y + 3);
-    }
+    const scoreText = `${earned}/${effective || total}`;
+    const scoreTextW = pdf.getTextWidth(scoreText);
+    pdf.text(scoreText, PAGE_W - M - scoreTextW, y + 3);
     if (fails > 0) {
       const failText = `${fails} flag${fails > 1 ? "s" : ""}`;
       const w = pdf.getTextWidth(failText);
-      const x = total > 0
-        ? PAGE_W - M - pdf.getTextWidth(`${earned}/${total}`) - w - 4
-        : PAGE_W - M - w;
+      const x = PAGE_W - M - scoreTextW - w - 4;
       setText(pdf, COLOR.red);
       pdf.text(failText, x, y + 3);
     }
 
-    if (total > 0) {
+    if (effective > 0) {
       const barY = y + 5;
       setFill(pdf, COLOR.faint);
       pdf.rect(M, barY, CONTENT_W, 1.4, "F");
       const filledColor = sec.zeroTolerance && fails > 0 ? COLOR.red : COLOR.stone700;
       setFill(pdf, filledColor);
-      pdf.rect(M, barY, CONTENT_W * (earned / total), 1.4, "F");
+      pdf.rect(M, barY, CONTENT_W * (earned / effective), 1.4, "F");
     }
     y += 9;
   }
@@ -299,9 +381,11 @@ export async function generateReportPDF({ report, site }) {
   for (const sec of SCHEMA) {
     const items = sec.items;
     if (!items || items.length === 0) continue;
-    const earned = items.reduce((a, it) => a + (report.answers[it.id] === "pass" ? it.pts : 0), 0);
+    const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
     const total = items.reduce((a, it) => a + it.pts, 0);
-    const fails = items.filter((it) => report.answers[it.id] === "fail").length;
+    const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
+    const fails = items.filter((it) => report.answers?.[it.id] === "fail").length;
+    const effective = total - naPts;
 
     // Section header band
     ensureSpace(11);
@@ -316,19 +400,17 @@ export async function generateReportPDF({ report, site }) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     setText(pdf, COLOR.muted);
-    let metaRight = "";
-    if (total > 0) metaRight = `${earned}/${total}`;
-    if (fails > 0) metaRight = metaRight ? `${fails} flag${fails > 1 ? "s" : ""}  ·  ${metaRight}` : `${fails} flag${fails > 1 ? "s" : ""}`;
-    if (metaRight) {
-      const w = pdf.getTextWidth(metaRight);
-      pdf.text(metaRight, PAGE_W - M - 2 - w, y + 5);
-    }
+    let metaRight = `${earned}/${effective || total}`;
+    if (naPts > 0) metaRight = `${naPts}pt N/A  ·  ${metaRight}`;
+    if (fails > 0) metaRight = `${fails} flag${fails > 1 ? "s" : ""}  ·  ${metaRight}`;
+    const w = pdf.getTextWidth(metaRight);
+    pdf.text(metaRight, PAGE_W - M - 2 - w, y + 5);
     y += 9;
 
     // Each item in section
     for (let idx = 0; idx < items.length; idx++) {
       const it = items[idx];
-      const ans = report.answers[it.id];
+      const ans = report.answers?.[it.id];
       const comment = report.comments?.[it.id] || "";
       const photos = photoCache[it.id] || [];
 
@@ -364,7 +446,9 @@ export async function generateReportPDF({ report, site }) {
         ? { label: "PASS", fill: COLOR.emerald, color: [255, 255, 255] }
         : ans === "fail"
           ? { label: "FAIL", fill: COLOR.red, color: [255, 255, 255] }
-          : { label: "—", fill: null, color: COLOR.muted };
+          : ans === "na"
+            ? { label: "N/A", fill: COLOR.stone700, color: [255, 255, 255] }
+            : { label: "—", fill: null, color: COLOR.muted };
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(7);
@@ -418,7 +502,6 @@ export async function generateReportPDF({ report, site }) {
 
       y = cursorY + ROW_PAD_Y;
 
-      // Hairline divider between items
       if (idx < items.length - 1) {
         setDraw(pdf, COLOR.faint);
         pdf.setLineWidth(0.15);

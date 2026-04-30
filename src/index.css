@@ -2,11 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root { height: 100%; }
+html, body, #root {
+  /* dvh tracks the iOS dynamic viewport so PWA headers don't slide
+     under the status bar when the URL bar shows/hides. */
+  height: 100dvh;
+  min-height: 100dvh;
+}
+@supports not (height: 100dvh) {
+  html, body, #root { height: 100%; }
+}
 body {
   font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 
 .font-display { font-family: "Fraunces", ui-serif, Georgia, serif; font-optical-sizing: auto; }

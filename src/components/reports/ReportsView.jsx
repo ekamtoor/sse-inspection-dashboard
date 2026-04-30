@@ -105,6 +105,7 @@ export default function ReportsView({ reports, sites, detail, setDetail, onDelet
             <tr className="text-left">
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Date</th>
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Site</th>
+              <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Result</th>
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Score</th>
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Flags</th>
               <th className="text-[10px] font-medium uppercase tracking-wider text-stone-500 px-6 py-3">Inspector</th>
@@ -114,9 +115,11 @@ export default function ReportsView({ reports, sites, detail, setDetail, onDelet
           <tbody className="divide-y divide-stone-100">
             {filtered.map((r) => {
               const site = sites.find((s) => s.id === r.siteId);
-              const ztFails = r.fails.filter((f) =>
+              const fails = r.fails || [];
+              const ztFails = fails.filter((f) =>
                 SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id))
               );
+              const passed = typeof r.passed === "boolean" ? r.passed : null;
               return (
                 <tr key={r.id} className="hover:bg-stone-50 group">
                   <td className="px-6 py-4 font-mono text-xs cursor-pointer" onClick={() => setDetail(r)}>{new Date(r.completedAt).toLocaleDateString()}</td>
@@ -125,12 +128,26 @@ export default function ReportsView({ reports, sites, detail, setDetail, onDelet
                     <div className="text-xs text-stone-500">{site?.city}</div>
                   </td>
                   <td className="px-6 py-4 cursor-pointer" onClick={() => setDetail(r)}>
-                    <div className="font-mono text-base font-semibold">{r.score}<span className="text-stone-400 text-xs">/{r.total}</span></div>
+                    {passed === true && (
+                      <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Pass</span>
+                    )}
+                    {passed === false && (
+                      <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-red-600 text-white rounded font-bold">Fail</span>
+                    )}
+                    {passed === null && (
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-stone-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 cursor-pointer" onClick={() => setDetail(r)}>
+                    <div className="font-mono text-base font-semibold">{r.score}<span className="text-stone-400 text-xs">/{r.effectiveTotal || r.total}</span></div>
+                    {typeof r.percentage === "number" && (
+                      <div className="font-mono text-[10px] text-stone-500">{Math.round(r.percentage * 100)}%</div>
+                    )}
                   </td>
                   <td className="px-6 py-4 cursor-pointer" onClick={() => setDetail(r)}>
                     <div className="flex items-center gap-2">
-                      <span className={`font-mono text-sm ${r.fails.length > 0 ? "text-red-600 font-semibold" : "text-stone-400"}`}>
-                        {r.fails.length}
+                      <span className={`font-mono text-sm ${fails.length > 0 ? "text-red-600 font-semibold" : "text-stone-400"}`}>
+                        {fails.length}
                       </span>
                       {ztFails.length > 0 && (
                         <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold flex items-center gap-1">
@@ -163,10 +180,10 @@ export default function ReportsView({ reports, sites, detail, setDetail, onDelet
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-stone-500">
+              <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-stone-500">
                 <FileText className="w-8 h-8 text-stone-300 mx-auto mb-2" />
                 {sortedAll.length === 0
-                  ? "No reports yet. Run a pre-inspection."
+                  ? "No reports yet. Run an inspection."
                   : "No reports match the current filters."}
               </td></tr>
             )}
@@ -178,9 +195,11 @@ export default function ReportsView({ reports, sites, detail, setDetail, onDelet
       <div className="md:hidden space-y-2">
         {filtered.map((r) => {
           const site = sites.find((s) => s.id === r.siteId);
-          const ztFails = r.fails.filter((f) =>
+          const fails = r.fails || [];
+          const ztFails = fails.filter((f) =>
             SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id))
           );
+          const passed = typeof r.passed === "boolean" ? r.passed : null;
           return (
             <div
               key={r.id}
@@ -191,18 +210,29 @@ export default function ReportsView({ reports, sites, detail, setDetail, onDelet
                 className="w-full text-left"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 pr-8">
-                    <div className="text-xs font-mono text-stone-500">{new Date(r.completedAt).toLocaleDateString()}</div>
+                  <div className="min-w-0 flex-1 pr-10">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="text-xs font-mono text-stone-500">{new Date(r.completedAt).toLocaleDateString()}</div>
+                      {passed === true && (
+                        <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Pass</span>
+                      )}
+                      {passed === false && (
+                        <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-red-600 text-white rounded font-bold">Fail</span>
+                      )}
+                    </div>
                     <div className="text-sm font-medium mt-0.5 truncate">
                       {site?.name || <span className="italic text-stone-400">site removed</span>}
                     </div>
                     <div className="text-xs text-stone-500 truncate">{r.inspector || "—"}</div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <div className="font-mono text-xl font-semibold">{r.score}<span className="text-stone-400 text-sm">/{r.total}</span></div>
+                    <div className="font-mono text-xl font-semibold">{r.score}<span className="text-stone-400 text-sm">/{r.effectiveTotal || r.total}</span></div>
+                    {typeof r.percentage === "number" && (
+                      <div className="font-mono text-[10px] text-stone-500">{Math.round(r.percentage * 100)}%</div>
+                    )}
                     <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                      <span className={`font-mono text-xs ${r.fails.length > 0 ? "text-red-600 font-semibold" : "text-stone-400"}`}>
-                        {r.fails.length} flag{r.fails.length === 1 ? "" : "s"}
+                      <span className={`font-mono text-xs ${fails.length > 0 ? "text-red-600 font-semibold" : "text-stone-400"}`}>
+                        {fails.length} flag{fails.length === 1 ? "" : "s"}
                       </span>
                       {ztFails.length > 0 && (
                         <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-red-100 text-red-800 rounded font-bold">
@@ -216,7 +246,7 @@ export default function ReportsView({ reports, sites, detail, setDetail, onDelet
               {onDelete && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(r); }}
-                  className="absolute top-3 right-3 p-2 rounded-md text-stone-400 hover:text-red-600 hover:bg-red-50"
+                  className="absolute bottom-3 right-3 p-2 rounded-md text-stone-400 hover:text-red-600 hover:bg-red-50"
                   title="Delete report"
                 >
                   <Trash2 className="w-4 h-4" />

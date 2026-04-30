@@ -90,7 +90,7 @@ export default function CorporateDetail({ corp, sites, completed, onBack, onDele
                 Internal vs Corporate {delta > 0 ? "(corporate higher)" : "(corporate lower)"}
               </div>
               <p className="text-sm text-stone-700 mt-1">
-                Internal pre-inspection on {new Date(matching.completedAt).toLocaleDateString()} scored{" "}
+                Internal inspection on {new Date(matching.completedAt).toLocaleDateString()} scored{" "}
                 <span className="font-mono font-semibold">{matching.score}/{matching.total}</span>{" "}
                 ({Math.round(internalPct * 100)}%). Corporate scored{" "}
                 <span className="font-mono font-semibold">{corp.score}/{corp.total}</span>{" "}
@@ -106,7 +106,7 @@ export default function CorporateDetail({ corp, sites, completed, onBack, onDele
 
       {!matching && (
         <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 md:p-5 text-center">
-          <p className="text-sm text-stone-600">No internal pre-inspection within 30 days of this corporate visit.</p>
+          <p className="text-sm text-stone-600">No internal inspection within 30 days of this corporate visit.</p>
         </div>
       )}
 

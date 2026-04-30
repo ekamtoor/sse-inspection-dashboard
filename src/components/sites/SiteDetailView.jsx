@@ -117,9 +117,9 @@ export default function SiteDetailView({
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-stone-500">{new Date(r.completedAt).toLocaleDateString()}</span>
-                <span className="font-mono text-sm font-semibold">{r.score}/{r.total}</span>
+                <span className="font-mono text-sm font-semibold">{r.score}<span className="text-stone-400">/{r.effectiveTotal || r.total}</span></span>
               </div>
-              <div className="text-xs text-stone-600 mt-0.5">{r.fails.length} flag{r.fails.length === 1 ? "" : "s"}</div>
+              <div className="text-xs text-stone-600 mt-0.5">{(r.fails?.length || 0)} flag{(r.fails?.length || 0) === 1 ? "" : "s"}</div>
             </button>
           ))}
         </DetailListCard>

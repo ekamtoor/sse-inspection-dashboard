@@ -20,7 +20,7 @@ export default function CorporateView({ corporate, sites, completed, detail, set
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-stone-600 max-w-xl flex-1 min-w-0 hidden md:block">
-          Archive of corporate mystery-shop results. Compares against your internal pre-inspections.
+          Archive of corporate mystery-shop results. Compares against your internal inspections.
         </p>
         <button
           onClick={onAdd}

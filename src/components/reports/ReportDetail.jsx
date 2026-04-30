@@ -1,16 +1,89 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ShieldAlert, Download, Share2, Loader2, Trash2 } from "lucide-react";
-import { SCHEMA } from "../../data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE } from "../../data/schema.js";
 import PriorityPill from "../shared/PriorityPill.jsx";
+import PhotoLightbox from "../shared/PhotoLightbox.jsx";
+
+// Reports written before the unified-schema migration don't have the new
+// passed/percentage fields stored. Compute a reasonable approximation from
+// what's there so old records still render with sensible numbers.
+function deriveSummary(report) {
+  if (typeof report.percentage === "number" && typeof report.passed === "boolean") {
+    return {
+      effectiveTotal: report.effectiveTotal ?? report.total,
+      naPoints: report.naPoints ?? 0,
+      percentage: report.percentage,
+      passed: report.passed,
+      failReasons: report.failReasons || {},
+    };
+  }
+  let earned = 0;
+  let totalConfigured = 0;
+  let naPoints = 0;
+  let failedCriticalItems = 0;
+  let failedZTItems = 0;
+  for (const sec of SCHEMA) {
+    for (const it of sec.items) {
+      totalConfigured += it.pts;
+      const v = report.answers?.[it.id];
+      if (v === "pass") earned += it.pts;
+      else if (v === "na") naPoints += it.pts;
+      else if (v === "fail") {
+        if (sec.critical) failedCriticalItems += 1;
+        if (sec.zeroTolerance) failedZTItems += 1;
+      }
+    }
+  }
+  const usedTotal = totalConfigured > 0 ? totalConfigured : (report.total || 0);
+  const effectiveTotal = Math.max(usedTotal - naPoints, 0);
+  const computedEarned = earned > 0 ? earned : (report.score || 0);
+  const percentage = effectiveTotal > 0 ? computedEarned / effectiveTotal : 0;
+  const failReasons = {
+    critical: failedCriticalItems > 0,
+    zeroTolerance: failedZTItems > 0,
+    percentage: percentage < PASSING_PERCENTAGE,
+  };
+  return {
+    effectiveTotal,
+    naPoints,
+    percentage,
+    passed: !failReasons.critical && !failReasons.zeroTolerance && !failReasons.percentage,
+    failReasons,
+  };
+}
 
 export default function ReportDetail({ report, sites, onBack, onDelete }) {
   const site = sites.find((s) => s.id === report.siteId);
-  const ztFails = report.fails.filter((f) => SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id)));
+  const ztFails = (report.fails || []).filter((f) => SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id)));
+  const summary = useMemo(() => deriveSummary(report), [report]);
   const [pdfStatus, setPdfStatus] = useState("idle");
+  const [lightbox, setLightbox] = useState(null);
   const canShare =
     typeof navigator !== "undefined" &&
     typeof navigator.canShare === "function" &&
     typeof navigator.share === "function";
+
+  // Flatten all photos in order so the lightbox can navigate across items.
+  const allPhotos = useMemo(() => {
+    const out = [];
+    for (const sec of SCHEMA) {
+      for (const it of sec.items) {
+        const list = report.photos?.[it.id] || [];
+        for (const p of list) {
+          if (p?.url) out.push({ url: p.url, name: p.name || `${it.id}.jpg`, itemId: it.id });
+        }
+      }
+    }
+    return out;
+  }, [report]);
+
+  const openLightboxAt = (itemId, indexInItem) => {
+    const photosForItem = report.photos?.[itemId] || [];
+    const target = photosForItem[indexInItem];
+    if (!target) return;
+    const startIndex = allPhotos.findIndex((p) => p.url === target.url);
+    setLightbox(startIndex >= 0 ? startIndex : 0);
+  };
 
   const downloadPdf = async () => {
     if (pdfStatus !== "idle") return;
@@ -52,6 +125,9 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
       setPdfStatus("idle");
     }
   };
+
+  const verdict = summary.passed ? "PASS" : "FAIL";
+  const percentLabel = `${Math.round(summary.percentage * 100)}%`;
 
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6">
@@ -102,31 +178,71 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
       <div className="bg-gradient-to-br from-stone-900 to-stone-800 text-white rounded-xl p-5 md:p-8 relative overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-30" />
         <div className="relative">
-          <div className="text-[10px] uppercase tracking-widest text-amber-400 font-medium">Internal Pre-Inspection</div>
-          <h2 className="font-display text-2xl md:text-3xl font-semibold mt-2">{site?.name}</h2>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] uppercase tracking-widest text-amber-400 font-medium">Inspection Report</span>
+            <span
+              className={`text-[10px] uppercase tracking-widest px-2 py-0.5 rounded font-bold ${
+                summary.passed ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/20 text-red-300"
+              }`}
+            >
+              {verdict}
+            </span>
+          </div>
+          <h2 className="font-display text-2xl md:text-3xl font-semibold mt-2">{site?.name || <span className="italic text-stone-400">Site removed</span>}</h2>
           <p className="font-display italic text-stone-400 mt-1">
-            {site?.city} · {new Date(report.completedAt).toLocaleString()}
+            {site?.city ? `${site.city} · ` : ""}{new Date(report.completedAt).toLocaleString()}
           </p>
-          <div className="grid grid-cols-3 gap-4 md:gap-8 mt-5 md:mt-6 pt-5 md:pt-6 border-t border-stone-700">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 mt-5 md:mt-6 pt-5 md:pt-6 border-t border-stone-700">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-stone-400 font-medium">Score</div>
-              <div className="font-mono text-3xl md:text-4xl font-semibold mt-1">
-                {report.score}<span className="text-stone-500 text-lg md:text-xl">/{report.total}</span>
+              <div className="font-mono text-2xl md:text-4xl font-semibold mt-1">
+                {report.score}<span className="text-stone-500 text-sm md:text-xl">/{summary.effectiveTotal || report.total}</span>
               </div>
+              <div className="text-xs text-stone-400 mt-1 font-mono">{percentLabel}</div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-stone-400 font-medium">Inspector</div>
-              <div className="text-base md:text-lg font-medium mt-1">{report.inspector || "M. Reyes"}</div>
+              <div className="text-sm md:text-lg font-medium mt-1 truncate">{report.inspector || "—"}</div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-stone-400 font-medium">Flags</div>
-              <div className={`font-mono text-3xl md:text-4xl font-semibold mt-1 ${report.fails.length > 0 ? "text-red-400" : "text-stone-500"}`}>
-                {report.fails.length}
+              <div className={`font-mono text-2xl md:text-4xl font-semibold mt-1 ${(report.fails?.length || 0) > 0 ? "text-red-400" : "text-stone-500"}`}>
+                {report.fails?.length || 0}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-stone-400 font-medium">N/A</div>
+              <div className="font-mono text-2xl md:text-4xl font-semibold mt-1 text-stone-500">
+                {summary.naPoints}<span className="text-stone-600 text-sm md:text-xl">pt</span>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {!summary.passed && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 md:p-5">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 md:w-6 md:h-6 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <div className="font-display text-base md:text-lg font-semibold text-red-900">
+                Report did not pass
+              </div>
+              <ul className="text-xs md:text-sm text-red-800 mt-1 space-y-0.5">
+                {summary.failReasons.zeroTolerance && (
+                  <li>• Zero-tolerance violation flagged in Compliance &amp; Legal.</li>
+                )}
+                {summary.failReasons.critical && (
+                  <li>• At least one Image or Service Essentials item failed.</li>
+                )}
+                {summary.failReasons.percentage && (
+                  <li>• Score below {Math.round(PASSING_PERCENTAGE * 100)}% of effective total.</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {ztFails.length > 0 && (
         <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 md:p-5 flex items-start gap-3">
@@ -145,9 +261,11 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
         <div className="space-y-4">
           {SCHEMA.map((sec) => {
             const items = sec.items;
-            const earned = items.reduce((a, it) => a + (report.answers[it.id] === "pass" ? it.pts : 0), 0);
+            const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
             const total = items.reduce((a, it) => a + it.pts, 0);
-            const fails = items.filter((it) => report.answers[it.id] === "fail").length;
+            const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
+            const fails = items.filter((it) => report.answers?.[it.id] === "fail").length;
+            const effective = total - naPts;
             if (total === 0 && fails === 0) return null;
             return (
               <div key={sec.id} className="space-y-1.5">
@@ -157,16 +275,16 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
                     <span className="truncate">{sec.label}</span>
                     {fails > 0 && <span className="text-xs text-red-600 font-mono flex-shrink-0">{fails} ✗</span>}
                   </span>
-                  {total > 0 && <span className="font-mono text-sm flex-shrink-0">{earned}/{total}</span>}
+                  <span className="font-mono text-sm flex-shrink-0">
+                    {earned}<span className="text-stone-400">/{effective || total}</span>
+                  </span>
                 </div>
-                {total > 0 && (
-                  <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${sec.zeroTolerance && fails > 0 ? "bg-red-500" : "bg-stone-700"}`}
-                      style={{ width: `${(earned / total) * 100}%` }}
-                    />
-                  </div>
-                )}
+                <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${sec.zeroTolerance && fails > 0 ? "bg-red-500" : "bg-stone-700"}`}
+                    style={{ width: `${effective > 0 ? (earned / effective) * 100 : 0}%` }}
+                  />
+                </div>
               </div>
             );
           })}
@@ -177,17 +295,18 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
         <div className="px-4 md:px-6 py-3 md:py-4 border-b border-stone-200">
           <h3 className="font-display text-lg font-semibold">Full Inspection</h3>
           <p className="text-xs text-stone-500 mt-0.5">
-            {report.fails.length} flag{report.fails.length === 1 ? "" : "s"} · every item listed below
+            {report.fails?.length || 0} flag{(report.fails?.length || 0) === 1 ? "" : "s"} · every item listed below
           </p>
         </div>
         <div>
           {SCHEMA.map((sec) => {
             const items = sec.items;
             if (!items || items.length === 0) return null;
-            const earned = items.reduce((a, it) => a + (report.answers[it.id] === "pass" ? it.pts : 0), 0);
+            const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
             const total = items.reduce((a, it) => a + it.pts, 0);
-            const failsInSec = items.filter((it) => report.answers[it.id] === "fail").length;
-            const failsList = report.fails.filter((f) => items.some((i) => i.id === f.id));
+            const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
+            const failsInSec = items.filter((it) => report.answers?.[it.id] === "fail").length;
+            const failsList = (report.fails || []).filter((f) => items.some((i) => i.id === f.id));
             return (
               <div key={sec.id} className="border-t border-stone-100 first:border-t-0">
                 <div
@@ -207,17 +326,20 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
                         {failsInSec} flag{failsInSec > 1 ? "s" : ""}
                       </span>
                     )}
-                    {total > 0 && (
-                      <span className="font-mono text-stone-600">
-                        {earned}<span className="text-stone-400">/{total}</span>
+                    {naPts > 0 && (
+                      <span className="text-stone-500 font-mono">
+                        {naPts}pt N/A
                       </span>
                     )}
+                    <span className="font-mono text-stone-600">
+                      {earned}<span className="text-stone-400">/{total - naPts || total}</span>
+                    </span>
                   </div>
                 </div>
 
                 <div className="divide-y divide-stone-100">
                   {items.map((it) => {
-                    const ans = report.answers[it.id];
+                    const ans = report.answers?.[it.id];
                     const note = report.comments?.[it.id];
                     const photos = report.photos?.[it.id] || [];
                     const failMatch = failsList.find((f) => f.id === it.id);
@@ -242,6 +364,11 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
                                     Fail
                                   </span>
                                 )}
+                                {ans === "na" && (
+                                  <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-stone-700 text-white rounded font-bold">
+                                    N/A
+                                  </span>
+                                )}
                                 {!ans && (
                                   <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-stone-100 text-stone-500 rounded">
                                     —
@@ -255,13 +382,11 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
                             {photos.length > 0 && (
                               <div className="mt-2 flex items-center gap-2 flex-wrap">
                                 {photos.map((p, i) => (
-                                  <a
+                                  <button
                                     key={p.path || p.url || i}
-                                    href={p.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                    onClick={() => openLightboxAt(it.id, i)}
                                     className="w-16 h-16 md:w-20 md:h-20 rounded-md bg-stone-100 border border-stone-200 overflow-hidden hover:border-stone-400 transition-colors"
-                                    title="Open full size"
+                                    title="Click to enlarge"
                                   >
                                     <img
                                       src={p.url}
@@ -269,7 +394,7 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
                                       className="w-full h-full object-cover"
                                       loading="lazy"
                                     />
-                                  </a>
+                                  </button>
                                 ))}
                               </div>
                             )}
@@ -284,6 +409,10 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
           })}
         </div>
       </div>
+
+      {lightbox !== null && allPhotos.length > 0 && (
+        <PhotoLightbox photos={allPhotos} startIndex={lightbox} onClose={() => setLightbox(null)} />
+      )}
     </div>
   );
 }

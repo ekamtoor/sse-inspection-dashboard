@@ -337,8 +337,10 @@ function AppShell({ user }) {
   };
 
   const updateIssue = (issue) => {
+    // No toast — IssueDetailModal fires this on every activity event
+    // (status change, note, attachment) and the timeline already gives
+    // visual feedback. A toast on each call would be noisy.
     setIssues((prev) => (prev || []).map((i) => (i.id === issue.id ? issue : i)));
-    toast("Issue updated.");
   };
   const addIssue = (form) => {
     const inspectorName = resolveInspectorName();
@@ -476,7 +478,7 @@ function AppShell({ user }) {
   const siteDetail = siteDetailId ? sitesEnriched.find((s) => s.id === siteDetailId) : null;
 
   return (
-    <div className="h-screen flex bg-stone-50 text-stone-900 overflow-hidden">
+    <div className="h-[100dvh] flex bg-stone-50 text-stone-900 overflow-hidden">
       <Sidebar
         view={view}
         setView={navigate}
