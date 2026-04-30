@@ -67,18 +67,31 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
     typeof navigator.share === "function";
 
   // Flatten all photos in order so the lightbox can navigate across items.
+  // Each entry carries the item context (question, answer, comment, section)
+  // so the lightbox can show an info panel beside the photo.
   const allPhotos = useMemo(() => {
     const out = [];
     for (const sec of fullSchema) {
       for (const it of sec.items) {
         const list = report.photos?.[it.id] || [];
         for (const p of list) {
-          if (p?.url) out.push({ url: p.url, name: p.name || `${it.id}.jpg`, itemId: it.id });
+          if (p?.url) out.push({
+            url: p.url,
+            name: p.name || `${it.id}.jpg`,
+            itemId: it.id,
+            itemQuestion: it.q,
+            itemPoints: it.pts,
+            sectionLabel: sec.label,
+            sectionDocumentation: !!sec.documentation,
+            sectionZeroTolerance: !!sec.zeroTolerance,
+            answer: report.answers?.[it.id],
+            comment: report.comments?.[it.id] || "",
+          });
         }
       }
     }
     return out;
-  }, [report]);
+  }, [report, fullSchema]);
 
   const openLightboxAt = (itemId, indexInItem) => {
     const photosForItem = report.photos?.[itemId] || [];
