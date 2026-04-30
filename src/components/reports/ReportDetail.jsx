@@ -260,6 +260,9 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
         <h3 className="font-display text-lg font-semibold mb-4">By Section</h3>
         <div className="space-y-4">
           {SCHEMA.map((sec) => {
+            // Skip documentation-only sections (e.g. per-pump checklist) from
+            // the score-bar overview — they don't contribute to /200.
+            if (sec.documentation) return null;
             const items = sec.items;
             const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
             const total = items.reduce((a, it) => a + it.pts, 0);
@@ -306,19 +309,29 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
             const total = items.reduce((a, it) => a + it.pts, 0);
             const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
             const failsInSec = items.filter((it) => report.answers?.[it.id] === "fail").length;
+            const naCount = items.filter((it) => report.answers?.[it.id] === "na").length;
+            const passCount = items.filter((it) => report.answers?.[it.id] === "pass").length;
             const failsList = (report.fails || []).filter((f) => items.some((i) => i.id === f.id));
             return (
               <div key={sec.id} className="border-t border-stone-100 first:border-t-0">
                 <div
-                  className={`px-4 md:px-6 py-2.5 flex items-center gap-3 ${
+                  className={`px-4 md:px-6 py-2.5 flex items-start gap-3 ${
                     sec.zeroTolerance ? "bg-red-50" : "bg-stone-50"
                   }`}
                 >
-                  <div className="flex-1 min-w-0 flex items-center gap-2">
-                    {sec.zeroTolerance && <ShieldAlert className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />}
-                    <span className={`font-display font-semibold text-sm md:text-base ${sec.zeroTolerance ? "text-red-900" : "text-stone-900"}`}>
-                      {sec.label}
-                    </span>
+                  <div className="flex-1 min-w-0 flex items-start gap-2">
+                    {sec.zeroTolerance && <ShieldAlert className="w-3.5 h-3.5 text-red-600 flex-shrink-0 mt-0.5" />}
+                    <div className="min-w-0">
+                      <div className={`font-display font-semibold text-sm md:text-base ${sec.zeroTolerance ? "text-red-900" : "text-stone-900"}`}>
+                        {sec.label}
+                        {sec.documentation && (
+                          <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-stone-500 font-bold">Documentation</span>
+                        )}
+                      </div>
+                      {sec.subtitle && (
+                        <div className="text-[11px] text-stone-500 mt-0.5">{sec.subtitle}</div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-3 text-xs flex-shrink-0">
                     {failsInSec > 0 && (
@@ -326,14 +339,22 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
                         {failsInSec} flag{failsInSec > 1 ? "s" : ""}
                       </span>
                     )}
-                    {naPts > 0 && (
-                      <span className="text-stone-500 font-mono">
-                        {naPts}pt N/A
+                    {sec.documentation ? (
+                      <span className="font-mono text-stone-600">
+                        {passCount} pass · {naCount} N/A
                       </span>
+                    ) : (
+                      <>
+                        {naPts > 0 && (
+                          <span className="text-stone-500 font-mono">
+                            {naPts}pt N/A
+                          </span>
+                        )}
+                        <span className="font-mono text-stone-600">
+                          {earned}<span className="text-stone-400">/{total - naPts || total}</span>
+                        </span>
+                      </>
                     )}
-                    <span className="font-mono text-stone-600">
-                      {earned}<span className="text-stone-400">/{total - naPts || total}</span>
-                    </span>
                   </div>
                 </div>
 

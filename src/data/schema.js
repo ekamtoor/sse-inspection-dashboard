@@ -92,14 +92,16 @@ export const SCHEMA = [
     id: "operations",
     label: "Operations & Inventory",
     items: [
-      { id: "OP-1", q: "Beer cooler fully stocked, faced, and rotated FIFO?", pts: 2 },
-      { id: "OP-2", q: "No expired dairy, sandwiches, or perishables on the floor?", pts: 3 },
-      { id: "OP-3", q: "Coffee station fully stocked (cups, lids, creamer, sweeteners)?", pts: 3 },
-      { id: "OP-4", q: "Cigarette par stock met (no SKU below 2 cartons)?", pts: 3 },
-      { id: "OP-5", q: "Tobacco price tags visible, legible, and current?", pts: 2 },
-      { id: "OP-6", q: "Beverage and freezer temperatures within target ranges?", pts: 3 },
-      { id: "OP-7", q: "ATM operational, stocked, and surcharge posted clearly?", pts: 2 },
-      { id: "OP-8", q: "Lottery terminal and displays operational, fully stocked?", pts: 2 },
+      { id: "OP-1",  q: "Beer cooler fully stocked, faced, and rotated FIFO?", pts: 2 },
+      { id: "OP-2",  q: "No expired dairy, sandwiches, or perishables on the floor?", pts: 3 },
+      { id: "OP-3",  q: "Coffee station fully stocked (cups, lids, creamer, sweeteners)?", pts: 2 },
+      { id: "OP-4",  q: "Cigarette par stock met (no SKU below 2 cartons)?", pts: 2 },
+      { id: "OP-5",  q: "Tobacco prices accurate, and price tags visible, legible, and current?", pts: 2 },
+      { id: "OP-6",  q: "Beverage and freezer temperatures within target ranges?", pts: 3 },
+      { id: "OP-7",  q: "ATM operational, stocked, and surcharge posted clearly?", pts: 1 },
+      { id: "OP-8",  q: "Lottery terminal operational and scratch-off display fully stocked?", pts: 1 },
+      { id: "OP-9",  q: "Pull-tab game machines stocked and functional?", pts: 1 },
+      { id: "OP-10", q: "Tobacco buy-down / rebate program tracked accurately, qty limits met for each active deal?", pts: 3 },
     ],
   },
   {
@@ -112,6 +114,17 @@ export const SCHEMA = [
       { id: "EQ-4", q: "Air pump operational, hose intact, gauge accurate?", pts: 3 },
       { id: "EQ-5", q: "Vacuum operational, suction strong, hoses clean?", pts: 3 },
     ],
+  },
+  {
+    id: "pumps",
+    label: "Pumps & Fueling Positions",
+    documentation: true,
+    subtitle: "Per-pump check — mark N/A for any positions that don't exist at the site. Failures here are tracked but do not change the 200-point score (overall pump quality is already scored under Image Essentials I-4 and Service Essentials S-4).",
+    items: Array.from({ length: 16 }, (_, i) => ({
+      id: `P-${i + 1}`,
+      q: `Pump ${i + 1} — clean, operational, free of graffiti and stickers?`,
+      pts: 0,
+    })),
   },
 ];
 

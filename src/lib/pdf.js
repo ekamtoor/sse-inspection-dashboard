@@ -323,6 +323,7 @@ export async function generateReportPDF({ report, site }) {
   y += 8;
 
   for (const sec of SCHEMA) {
+    if (sec.documentation) continue; // skip 0-pt sections from the score overview
     const items = sec.items;
     const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
     const total = items.reduce((a, it) => a + it.pts, 0);
@@ -385,12 +386,16 @@ export async function generateReportPDF({ report, site }) {
     const total = items.reduce((a, it) => a + it.pts, 0);
     const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
     const fails = items.filter((it) => report.answers?.[it.id] === "fail").length;
+    const naCount = items.filter((it) => report.answers?.[it.id] === "na").length;
+    const passCount = items.filter((it) => report.answers?.[it.id] === "pass").length;
     const effective = total - naPts;
 
-    // Section header band
-    ensureSpace(11);
+    // Section header band — taller for documentation sections so the
+    // subtitle can fit beneath the title.
+    const bandH = sec.documentation && sec.subtitle ? 12 : 7.6;
+    ensureSpace(bandH + 3);
     setFill(pdf, sec.zeroTolerance ? COLOR.redSoft : COLOR.surface);
-    pdf.rect(M, y, CONTENT_W, 7.6, "F");
+    pdf.rect(M, y, CONTENT_W, bandH, "F");
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(10);
     setText(pdf, sec.zeroTolerance ? COLOR.redInk : COLOR.ink);
@@ -400,12 +405,26 @@ export async function generateReportPDF({ report, site }) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     setText(pdf, COLOR.muted);
-    let metaRight = `${earned}/${effective || total}`;
-    if (naPts > 0) metaRight = `${naPts}pt N/A  ·  ${metaRight}`;
-    if (fails > 0) metaRight = `${fails} flag${fails > 1 ? "s" : ""}  ·  ${metaRight}`;
+    let metaRight;
+    if (sec.documentation) {
+      metaRight = `${passCount} pass  ·  ${naCount} N/A`;
+      if (fails > 0) metaRight = `${fails} flag${fails > 1 ? "s" : ""}  ·  ${metaRight}`;
+    } else {
+      metaRight = `${earned}/${effective || total}`;
+      if (naPts > 0) metaRight = `${naPts}pt N/A  ·  ${metaRight}`;
+      if (fails > 0) metaRight = `${fails} flag${fails > 1 ? "s" : ""}  ·  ${metaRight}`;
+    }
     const w = pdf.getTextWidth(metaRight);
     pdf.text(metaRight, PAGE_W - M - 2 - w, y + 5);
-    y += 9;
+
+    if (sec.documentation && sec.subtitle) {
+      pdf.setFont("helvetica", "italic");
+      pdf.setFontSize(7);
+      setText(pdf, COLOR.muted);
+      const subLines = pdf.splitTextToSize(sec.subtitle, CONTENT_W - 4);
+      pdf.text(subLines.slice(0, 1), M + 2, y + 9.5);
+    }
+    y += bandH + 2;
 
     // Each item in section
     for (let idx = 0; idx < items.length; idx++) {
