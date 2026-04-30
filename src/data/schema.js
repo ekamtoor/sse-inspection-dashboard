@@ -8,7 +8,7 @@
 //   2. No failed item in any section flagged `zeroTolerance` (Compliance)
 //   3. Score >= 85% of effective total
 //
-// Section point totals: 50 + 40 + 20 + 30 + 15 + 10 + 20 + 15 = 200
+// Section point totals: 50 + 40 + 20 + 22 + 12 + 8 + 20 + 16 + 12 = 200
 
 export const SCHEMA = [
   {
@@ -56,16 +56,15 @@ export const SCHEMA = [
     id: "brand",
     label: "Brand Standards & Site Condition",
     items: [
-      { id: "BS-1",  q: "Channel letters and canopy fascia well-maintained, meet brand standards?", pts: 3 },
-      { id: "BS-2",  q: "Top Tier branding visible on all gasoline dispensers?", pts: 3 },
-      { id: "BS-3",  q: "No more than one fueling position out of order?", pts: 3 },
-      { id: "BS-4",  q: "Trash receptacles have lids and meet brand standards?", pts: 3 },
-      { id: "BS-5",  q: "Dispenser island curbs and bollards well-maintained (no rust, chips, bent)?", pts: 3 },
-      { id: "BS-6",  q: "Building curbs and perimeter curbs well-maintained?", pts: 3 },
-      { id: "BS-7",  q: "Landscaped areas and parking lot clean, well-maintained, no potholes?", pts: 3 },
-      { id: "BS-8",  q: "Building exterior (paint, siding, soffit, gutters) well-maintained?", pts: 3 },
-      { id: "BS-9",  q: "Windows clear, unobstructed view (no excessive signage blocking forecourt visibility)?", pts: 3 },
-      { id: "BS-10", q: "Aisles free of clutter, pallets, and boxes (no active stocking exemption)?", pts: 3 },
+      { id: "BS-1", q: "Channel letters and canopy fascia well-maintained, meet brand standards?", pts: 3 },
+      { id: "BS-2", q: "Top Tier branding visible on all gasoline dispensers?", pts: 2 },
+      { id: "BS-3", q: "No more than one fueling position out of order?", pts: 3 },
+      { id: "BS-4", q: "Trash receptacles have lids and meet brand standards?", pts: 2 },
+      { id: "BS-5", q: "Dispenser island curbs and bollards well-maintained (no rust, chips, bent)?", pts: 2 },
+      { id: "BS-6", q: "Building curbs and perimeter curbs well-maintained?", pts: 2 },
+      { id: "BS-7", q: "Landscaped areas and parking lot clean, well-maintained, no potholes?", pts: 3 },
+      { id: "BS-8", q: "Building exterior (paint, siding, soffit, gutters) well-maintained?", pts: 2 },
+      { id: "BS-9", q: "Windows clear, unobstructed view (no excessive signage blocking forecourt visibility)?", pts: 3 },
     ],
   },
   {
@@ -73,19 +72,19 @@ export const SCHEMA = [
     label: "Customer Experience",
     items: [
       { id: "D-1", q: "Product shelves, displays, coolers, and food-service areas clean and functioning?", pts: 3 },
-      { id: "D-2", q: "C-store has a good selection of products?", pts: 3 },
-      { id: "D-3", q: "Food service offer present and well-stocked?", pts: 3 },
+      { id: "D-2", q: "C-store has a good selection of products?", pts: 2 },
+      { id: "D-3", q: "Food service offer present and well-stocked?", pts: 2 },
       { id: "D-4", q: "Staff pleasant, polite, made you feel valued?", pts: 3 },
-      { id: "D-5", q: "Carwash present, clean, and fully operational?", pts: 3 },
+      { id: "D-5", q: "Carwash present, clean, and fully operational?", pts: 2 },
     ],
   },
   {
     id: "marketing",
     label: "Marketing Programs",
     items: [
-      { id: "M-1", q: "Site displaying current National Campaign POP in forecourt?", pts: 4 },
+      { id: "M-1", q: "Site displaying current National Campaign POP in forecourt?", pts: 3 },
       { id: "M-2", q: "Cashier mentioned the loyalty / rewards program?", pts: 3 },
-      { id: "M-3", q: "Loyalty / Rewards prompt present on dispenser screens?", pts: 3 },
+      { id: "M-3", q: "Loyalty / Rewards prompt present on dispenser screens?", pts: 2 },
     ],
   },
   {
@@ -97,7 +96,7 @@ export const SCHEMA = [
       { id: "OP-3",  q: "Coffee station fully stocked (cups, lids, creamer, sweeteners)?", pts: 2 },
       { id: "OP-4",  q: "Cigarette par stock met (no SKU below 2 cartons)?", pts: 2 },
       { id: "OP-5",  q: "Tobacco prices accurate, and price tags visible, legible, and current?", pts: 2 },
-      { id: "OP-6",  q: "Beverage and freezer temperatures within target ranges?", pts: 3 },
+      { id: "OP-6",  q: "Beverage cooler and freezer temperatures within target ranges (capture readings as a comment)?", pts: 3 },
       { id: "OP-7",  q: "ATM operational, stocked, and surcharge posted clearly?", pts: 1 },
       { id: "OP-8",  q: "Lottery terminal operational and scratch-off display fully stocked?", pts: 1 },
       { id: "OP-9",  q: "Pull-tab game machines stocked and functional?", pts: 1 },
@@ -108,11 +107,26 @@ export const SCHEMA = [
     id: "equipment",
     label: "Equipment & Compliance",
     items: [
-      { id: "EQ-1", q: "Security cameras live, recording, and DVR retention current (≥30 days)?", pts: 3 },
-      { id: "EQ-2", q: "Fire extinguishers tagged within the last 12 months?", pts: 3 },
-      { id: "EQ-3", q: "Underground storage tank monitoring system clear (no alarms)?", pts: 3 },
-      { id: "EQ-4", q: "Air pump operational, hose intact, gauge accurate?", pts: 3 },
-      { id: "EQ-5", q: "Vacuum operational, suction strong, hoses clean?", pts: 3 },
+      { id: "EQ-1", q: "All security cameras live, recording, and feeds visible on the DVR/monitor?", pts: 3 },
+      { id: "EQ-2", q: "DVR retention current (≥30 days), timestamps accurate, and footage reviewable?", pts: 3 },
+      { id: "EQ-3", q: "Fire extinguishers tagged within the last 12 months and in unobstructed locations?", pts: 2 },
+      { id: "EQ-4", q: "Underground storage tank (UST) monitoring system clear — no active alarms?", pts: 3 },
+      { id: "EQ-5", q: "Air pump operational, hose intact, pressure gauge accurate?", pts: 2 },
+      { id: "EQ-6", q: "Vacuum operational, suction strong, hoses clean and intact?", pts: 2 },
+      { id: "EQ-7", q: "Forecourt emergency stop button labeled, accessible, and tested per schedule?", pts: 1 },
+    ],
+  },
+  {
+    id: "food-safety",
+    label: "Food Service & Sanitation",
+    subtitle: "Mark items N/A if the site doesn't have food service / a kitchen.",
+    items: [
+      { id: "FS-1", q: "Compartment / 3-bay sink clean, fully operational, with hot water (≥110°F)? Capture photo.", pts: 2 },
+      { id: "FS-2", q: "Hand-wash sinks stocked (soap, paper towels), accessible, and in good repair?", pts: 2 },
+      { id: "FS-3", q: "Food prep surfaces, slicers, and utensils clean and sanitized?", pts: 2 },
+      { id: "FS-4", q: "Hot food holding temperatures at or above 135°F (rollers, warmers, etc.)?", pts: 2 },
+      { id: "FS-5", q: "All prepared food labeled with prep / use-by dates; nothing past discard?", pts: 2 },
+      { id: "FS-6", q: "Hood / exhaust ventilation clean, no excessive grease buildup, filters in place?", pts: 2 },
     ],
   },
 ];
