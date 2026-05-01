@@ -56,7 +56,15 @@ function isImage(att) {
 }
 
 export default function IssueDetailModal({ issue, sites, user, inspectorName, onUpdate, onDelete, onClose }) {
-  const site = sites.find((s) => s.id === issue.siteId);
+  // Mirror the prop in local state so button clicks paint instantly even
+  // before the parent's setIssues / re-render cycle finishes. The effect
+  // below syncs the prop back in if anything else updates the issue.
+  const [localIssue, setLocalIssue] = useState(issue);
+  useEffect(() => {
+    setLocalIssue(issue);
+  }, [issue]);
+  const view = localIssue;
+  const site = sites.find((s) => s.id === view.siteId);
   const [draftNote, setDraftNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -65,19 +73,20 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
 
   // Always read from the latest issue snapshot so the timeline updates after
   // each parent-side update.
-  const timeline = useMemo(() => buildTimeline(issue), [issue]);
-  const actor = inspectorName || issue.assignee || user?.email || "Inspector";
+  const timeline = useMemo(() => buildTimeline(view), [view]);
+  const actor = inspectorName || view.assignee || user?.email || "Inspector";
 
   useEffect(() => {
     setDraftNote("");
     setErrorMsg(null);
-  }, [issue.id]);
+  }, [view.id]);
 
   const appendEvent = (event) => {
     const next = {
-      ...issue,
-      activity: [...(issue.activity || []), event],
+      ...view,
+      activity: [...(view.activity || []), event],
     };
+    setLocalIssue(next);
     onUpdate(next);
   };
 
@@ -98,21 +107,23 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
   };
 
   const handleStatusChange = (next) => {
-    if (issue.status === next) return;
+    if (view.status === next) return;
     const event = {
       id: eventId(),
       type: "status_change",
       at: new Date().toISOString(),
       actor,
-      fromStatus: issue.status,
+      fromStatus: view.status,
       toStatus: next,
-      text: `Status changed from ${issue.status || "—"} to ${next}.`,
+      text: `Status changed from ${view.status || "—"} to ${next}.`,
     };
-    onUpdate({
-      ...issue,
+    const updated = {
+      ...view,
       status: next,
-      activity: [...(issue.activity || []), event],
-    });
+      activity: [...(view.activity || []), event],
+    };
+    setLocalIssue(updated);
+    onUpdate(updated);
   };
 
   const handleFile = async (file) => {
@@ -120,7 +131,7 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
     setUploading(true);
     setErrorMsg(null);
     try {
-      const result = await uploadFile(user.id, `issues/${issue.id}`, file);
+      const result = await uploadFile(user.id, `issues/${view.id}`, file);
       const event = {
         id: eventId(),
         type: "attachment",
@@ -146,10 +157,12 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
 
   const removeAttachment = (ev) => {
     if (ev.attachment?.path) deleteFile(ev.attachment.path);
-    onUpdate({
-      ...issue,
-      activity: (issue.activity || []).filter((e) => e.id !== ev.id),
-    });
+    const updated = {
+      ...view,
+      activity: (view.activity || []).filter((e) => e.id !== ev.id),
+    };
+    setLocalIssue(updated);
+    onUpdate(updated);
   };
 
   return (
@@ -168,14 +181,14 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
 
         <div className="px-5 md:px-6 py-4 md:py-5 border-b border-stone-200 flex items-start justify-between flex-shrink-0">
           <div className="flex items-start gap-3 min-w-0 flex-1">
-            <SeverityDot severity={issue.severity} />
+            <SeverityDot severity={view.severity} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500">{issue.id}</span>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500">{view.id}</span>
                 <span className="text-[10px] uppercase tracking-wider text-stone-500">·</span>
-                <span className="text-[10px] uppercase tracking-wider text-stone-500 truncate">{issue.category}</span>
+                <span className="text-[10px] uppercase tracking-wider text-stone-500 truncate">{view.category}</span>
               </div>
-              <h3 className="font-display text-base md:text-lg font-semibold mt-1">{issue.item}</h3>
+              <h3 className="font-display text-base md:text-lg font-semibold mt-1">{view.item}</h3>
             </div>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded flex-shrink-0">
@@ -192,17 +205,17 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-stone-500 font-medium">Opened</div>
-              <div className="text-sm font-mono mt-1">{issue.opened || "—"}</div>
+              <div className="text-sm font-mono mt-1">{view.opened || "—"}</div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-stone-500 font-medium">Severity</div>
               <div className="text-sm font-medium mt-1 capitalize flex items-center gap-2">
-                <SeverityDot severity={issue.severity} /> {issue.severity}
+                <SeverityDot severity={view.severity} /> {view.severity}
               </div>
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-stone-500 font-medium">Assignee</div>
-              <div className="text-sm font-medium mt-1">{issue.assignee || "—"}</div>
+              <div className="text-sm font-medium mt-1">{view.assignee || "—"}</div>
             </div>
           </div>
 
@@ -213,8 +226,8 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
                 <button
                   key={s.id}
                   onClick={() => handleStatusChange(s.id)}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-md ${
-                    issue.status === s.id
+                  className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${
+                    view.status === s.id
                       ? "bg-stone-900 text-white"
                       : "bg-white border border-stone-200 text-stone-700 hover:bg-stone-50"
                   }`}
@@ -222,7 +235,7 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
                   {s.label}
                 </button>
               ))}
-              <span className="ml-auto"><StatusPill status={issue.status} /></span>
+              <span className="ml-auto"><StatusPill status={view.status} /></span>
             </div>
             <p className="text-[11px] text-stone-500 mt-2">
               Changing status logs the transition to the activity timeline below.
@@ -391,7 +404,7 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
 
           {site?.manager?.email && (
             <a
-              href={`mailto:${site.manager.email}?subject=${encodeURIComponent(`[${issue.id}] ${issue.item}`)}&body=${encodeURIComponent(timeline.filter((e) => e.type === "note").map((e) => e.text).join("\n\n"))}`}
+              href={`mailto:${site.manager.email}?subject=${encodeURIComponent(`[${view.id}] ${view.item}`)}&body=${encodeURIComponent(timeline.filter((e) => e.type === "note").map((e) => e.text).join("\n\n"))}`}
               className="inline-flex items-center gap-2 text-xs font-medium text-stone-600 hover:text-stone-900 border border-stone-200 hover:bg-stone-50 px-3 py-2 rounded-md"
             >
               <Mail className="w-3.5 h-3.5" /> Email manager
@@ -402,7 +415,7 @@ export default function IssueDetailModal({ issue, sites, user, inspectorName, on
         <div className="px-5 md:px-6 py-4 border-t border-stone-200 flex items-center justify-between gap-2 flex-shrink-0">
           {onDelete ? (
             <button
-              onClick={() => onDelete(issue)}
+              onClick={() => onDelete(view)}
               className="text-xs font-medium px-2 md:px-3 py-2 rounded-md border border-stone-300 text-stone-600 hover:text-red-600 hover:border-red-300 hover:bg-red-50 flex items-center gap-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" />
