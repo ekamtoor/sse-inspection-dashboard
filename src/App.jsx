@@ -289,8 +289,54 @@ function AppShell({ user }) {
     if (fails.length > 0) {
       const newIssues = fails.map((f) => {
         const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
+        const baseTime = Date.now();
+        const baseId = `${baseTime}-${f.id}`;
+        const photosForItem = activeInspection.photos?.[f.id] || [];
+
+        const activity = [
+          {
+            id: `EV-${baseId}-create`,
+            type: "created",
+            at: new Date().toISOString(),
+            actor: inspectorName,
+            text: `Auto-created from inspection ${report.id}.`,
+          },
+        ];
+
+        // Bring the inspector's comment over as a note event so it shows up
+        // in the activity timeline alongside the rest of the conversation.
+        if (f.comment) {
+          activity.push({
+            id: `EV-${baseId}-note`,
+            type: "note",
+            at: new Date().toISOString(),
+            actor: inspectorName,
+            text: f.comment,
+          });
+        }
+
+        // Each failed-item photo becomes an attachment event. We deliberately
+        // omit `path` so deleting this issue later doesn't wipe the photo
+        // from Storage — the report still owns the underlying file.
+        for (let i = 0; i < photosForItem.length; i++) {
+          const p = photosForItem[i];
+          if (!p?.url) continue;
+          activity.push({
+            id: `EV-${baseId}-photo-${i}`,
+            type: "attachment",
+            at: new Date().toISOString(),
+            actor: inspectorName,
+            text: p.name || `Inspection photo ${i + 1}`,
+            attachment: {
+              url: p.url,
+              name: p.name || `Inspection photo ${i + 1}`,
+              contentType: "image/jpeg",
+            },
+          });
+        }
+
         return {
-          id: `ISS-${Date.now()}-${f.id}`,
+          id: `ISS-${baseId}`,
           siteId: activeInspection.siteId,
           category: sec?.label || "Inspection Finding",
           item: `${f.id} — ${f.q.slice(0, 60)}${f.q.length > 60 ? "…" : ""}`,
@@ -300,15 +346,8 @@ function AppShell({ user }) {
           note:
             (sec?.zeroTolerance ? "[ZERO TOLERANCE] " : "") + (f.comment || "Auto-generated from inspection."),
           assignee: inspectorName,
-          activity: [
-            {
-              id: `EV-${Date.now()}-${f.id}`,
-              type: "created",
-              at: new Date().toISOString(),
-              actor: inspectorName,
-              text: `Auto-created from inspection ${report.id}.`,
-            },
-          ],
+          sourceReportId: report.id,
+          activity,
         };
       });
       setIssues((prev) => [...newIssues, ...(prev || [])]);
@@ -696,7 +735,10 @@ function AppShell({ user }) {
 
       {issueDetail && (
         <IssueDetailModal
-          issue={issueDetail}
+          // Pull the live record out of the issues array so status changes
+          // and new activity events render immediately. Fall back to the
+          // captured snapshot if the row was just deleted out from under us.
+          issue={(issues || []).find((i) => i.id === issueDetail.id) || issueDetail}
           sites={sitesEnriched}
           user={user}
           inspectorName={resolveInspectorName()}
