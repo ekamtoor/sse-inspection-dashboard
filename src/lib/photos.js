@@ -1,4 +1,4 @@
-import { supabase } from "./supabase.js";
+import { supabase } from "./supabase/client.js";
 
 const BUCKET = "inspection-photos";
 const MAX_DIMENSION = 1600;

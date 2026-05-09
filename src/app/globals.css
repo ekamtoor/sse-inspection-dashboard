@@ -2,14 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  /* dvh tracks the iOS dynamic viewport so PWA headers don't slide
-     under the status bar when the URL bar shows/hides. */
+html, body {
+  /* dvh tracks the iOS dynamic viewport so PWA headers don't slide under
+     the status bar when the URL bar shows/hides. */
   height: 100dvh;
   min-height: 100dvh;
 }
 @supports not (height: 100dvh) {
-  html, body, #root { height: 100%; }
+  html, body { height: 100%; }
 }
 body {
   font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
@@ -38,12 +38,10 @@ body {
 .animate-slide { animation: slideIn 0.25s ease-out; }
 .animate-slide-up { animation: slideUp 0.25s ease-out; }
 
-/* iOS prevents zoom on input focus when font-size is at least 16px */
 @media (max-width: 767px) {
   input, select, textarea { font-size: 16px !important; }
 }
 
-/* Safe-area aware bottom padding helper */
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 
 @media print {

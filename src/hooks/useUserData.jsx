@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { supabase } from "../lib/supabase.js";
+import { supabase } from "../lib/supabase/client.js";
 import { SEED_SITES, SEED_SCHEDULED, SEED_ISSUES, SEED_CORPORATE } from "../data/seed.js";
 
 const KEYS = [

@@ -1,66 +1,66 @@
-import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+"use client";
 
-import { supabase } from "./lib/supabase.js";
-import { DataProvider, useDataContext, useUserDataKey } from "./hooks/useUserData.jsx";
-import LoginScreen from "./components/auth/LoginScreen.jsx";
-import { SCHEMA, PASSING_PERCENTAGE } from "./data/schema.js";
-import { computeScore } from "./lib/scoring.js";
-import { deletePhoto } from "./lib/photos.js";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-import Sidebar from "./components/layout/Sidebar.jsx";
-import MobileBottomNav from "./components/layout/MobileBottomNav.jsx";
-import MobileMoreSheet from "./components/layout/MobileMoreSheet.jsx";
-import TopBar from "./components/layout/TopBar.jsx";
-import Toasts from "./components/shared/Toasts.jsx";
-import ConfirmDialog from "./components/shared/ConfirmDialog.jsx";
+import { supabase } from "../supabase/client.js";
+import {
+  DataProvider,
+  useDataContext,
+  useUserDataKey,
+} from "../../hooks/useUserData.jsx";
+import { SCHEMA, resolveActiveTemplate, isScored } from "../../data/schema.js";
+import { computeScore } from "../scoring.js";
+import { deletePhoto } from "../photos.js";
 
-import Dashboard from "./components/dashboard/Dashboard.jsx";
-import SitesView from "./components/sites/SitesView.jsx";
-import SiteDetailView from "./components/sites/SiteDetailView.jsx";
-import SiteFormModal from "./components/sites/SiteFormModal.jsx";
-import ScheduleView from "./components/schedule/ScheduleView.jsx";
-import InspectionView from "./components/inspection/InspectionView.jsx";
-import ReportsView from "./components/reports/ReportsView.jsx";
-import CorporateView from "./components/corporate/CorporateView.jsx";
-import CorporateForm from "./components/corporate/CorporateForm.jsx";
-import IssuesView from "./components/issues/IssuesView.jsx";
-import IssueDetailModal from "./components/issues/IssueDetailModal.jsx";
-import IssueFormModal from "./components/issues/IssueFormModal.jsx";
-import InspectorsView from "./components/inspectors/InspectorsView.jsx";
-import InspectorFormModal from "./components/inspectors/InspectorFormModal.jsx";
+// =====================================================================
+// AppStateProvider
+// =====================================================================
+// Single client-side provider that holds *everything* the app shell used
+// to manage in App.jsx: data hooks (sites, scheduled, issues, reports,
+// corporate, inspectors, activeInspection, customTemplate), UI state
+// (modals, toasts, confirm dialog, mobile more-sheet), and every CRUD
+// handler.
+//
+// Pages and chrome components consume slices via useAppState(). This is
+// deliberately one big context — fine-grained context-splitting can come
+// later, but it would slow down the Next.js port and add no functional
+// improvement for SSE today.
+//
+// Hypeify Claude Code: tenant-aware data should land here. The provider
+// already takes a `user` prop; add a `tenant` prop and route reads/writes
+// through tenant-scoped tables. Templates should ultimately come from
+// `inspection_templates` rows, not from a per-user JSON blob.
+// =====================================================================
+
+const AppStateContext = createContext(null);
 
 function FullScreenLoader({ label }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-stone-50">
       <div className="flex items-center gap-3 text-stone-500 text-sm">
-        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="w-4 h-4 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
         {label || "Loading…"}
       </div>
     </div>
   );
 }
 
-export default function App() {
-  const [session, setSession] = useState(undefined);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  if (session === undefined) return <FullScreenLoader label="Loading…" />;
-  if (!session) return <LoginScreen />;
-
+export function AppStateProvider({ user, children }) {
   return (
-    <DataProvider user={session.user}>
-      <AppShell user={session.user} />
+    <DataProvider user={user}>
+      <Inner user={user}>{children}</Inner>
     </DataProvider>
   );
 }
 
-function AppShell({ user }) {
+function Inner({ user, children }) {
   const { data, error } = useDataContext();
   const [sites, setSites]                     = useUserDataKey("sites");
   const [scheduled, setScheduled]             = useUserDataKey("scheduled");
@@ -68,47 +68,43 @@ function AppShell({ user }) {
   const [completed, setCompleted]             = useUserDataKey("reports");
   const [corporate, setCorporate]             = useUserDataKey("corporate");
   const [inspectors, setInspectors]           = useUserDataKey("inspectors");
-
-  const [view, setViewRaw] = useUserDataKey("view");
+  const [customTemplate, setCustomTemplate]   = useUserDataKey("template");
   const [activeInspection, setActiveInspection] = useUserDataKey("active_inspection");
-  const [issueDetail,  setIssueDetail]  = useState(null);
-  const [showInspectorForm, setShowInspectorForm] = useState(false);
-  const [editingInspector,  setEditingInspector]  = useState(null);
-  const [reportDetail, setReportDetail] = useState(null);
-  const [corpDetail,   setCorpDetail]   = useState(null);
-  const [siteDetailId, setSiteDetailId] = useState(null);
-  const [showSiteForm, setShowSiteForm] = useState(false);
-  const [editingSite,  setEditingSite]  = useState(null);
-  const [showCorpForm, setShowCorpForm] = useState(false);
-  const [showIssueForm, setShowIssueForm] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState(null);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [toasts, setToasts] = useState([]);
 
-  const toast = (msg) => {
+  const [issueDetail, setIssueDetail]               = useState(null);
+  const [showInspectorForm, setShowInspectorForm]   = useState(false);
+  const [editingInspector, setEditingInspector]     = useState(null);
+  const [reportDetail, setReportDetail]             = useState(null);
+  const [corpDetail, setCorpDetail]                 = useState(null);
+  const [siteDetailId, setSiteDetailId]             = useState(null);
+  const [showSiteForm, setShowSiteForm]             = useState(false);
+  const [editingSite, setEditingSite]               = useState(null);
+  const [showCorpForm, setShowCorpForm]             = useState(false);
+  const [showIssueForm, setShowIssueForm]           = useState(false);
+  const [confirmDialog, setConfirmDialog]           = useState(null);
+  const [moreOpen, setMoreOpen]                     = useState(false);
+  const [toasts, setToasts]                         = useState([]);
+
+  const toast = useCallback((msg) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, msg }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
-  };
-
-  const navigate = (v) => {
-    setViewRaw(v);
-    setMoreOpen(false);
-    setSiteDetailId(null);
-  };
+  }, []);
 
   const sitesEnriched = useMemo(
     () =>
       (sites || []).map((s) => ({
         ...s,
-        openIssues: (issues || []).filter((i) => i.siteId === s.id && i.status !== "resolved").length,
+        openIssues: (issues || []).filter(
+          (i) => i.siteId === s.id && i.status !== "resolved"
+        ).length,
       })),
     [sites, issues]
   );
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-  };
+  }, []);
 
   const addSite = (siteData) => {
     const id = siteData.id || `site-${Date.now()}`;
@@ -120,20 +116,14 @@ function AppShell({ user }) {
   const updateSite = (siteData) => {
     const originalId = editingSite?.id ?? siteData.id;
     const newId = (siteData.id || "").trim() || originalId;
-
     if (newId !== originalId && (sites || []).some((s) => s.id === newId)) {
       toast(`Site ID "${newId}" is already in use.`);
       return;
     }
-
     const finalData = { ...siteData, id: newId };
-    setSites((prev) =>
-      (prev || []).map((s) => (s.id === originalId ? { ...s, ...finalData } : s))
-    );
-
+    setSites((prev) => (prev || []).map((s) => (s.id === originalId ? { ...s, ...finalData } : s)));
     if (newId !== originalId) {
-      const remap = (rows) =>
-        (rows || []).map((r) => (r.siteId === originalId ? { ...r, siteId: newId } : r));
+      const remap = (rows) => (rows || []).map((r) => (r.siteId === originalId ? { ...r, siteId: newId } : r));
       setScheduled(remap);
       setIssues(remap);
       setCompleted(remap);
@@ -143,15 +133,11 @@ function AppShell({ user }) {
       }
       if (siteDetailId === originalId) setSiteDetailId(newId);
     }
-
     setShowSiteForm(false);
     setEditingSite(null);
     toast("Site updated.");
   };
   const deleteSite = (siteId) => {
-    // Best-effort cleanup of any photos and note attachments in Storage that
-    // belonged to this site's reports, before we drop the rows that reference
-    // their paths.
     for (const r of completed || []) {
       if (r.siteId !== siteId) continue;
       for (const list of Object.values(r.photos || {})) {
@@ -161,17 +147,14 @@ function AppShell({ user }) {
         if (n?.attachment?.path) deletePhoto(n.attachment.path);
       }
     }
-
     setSites((prev) => (prev || []).filter((s) => s.id !== siteId));
     setScheduled((prev) => (prev || []).filter((s) => s.siteId !== siteId));
     setIssues((prev) => (prev || []).filter((i) => i.siteId !== siteId));
     setCompleted((prev) => (prev || []).filter((r) => r.siteId !== siteId));
     setCorporate((prev) => (prev || []).filter((c) => c.siteId !== siteId));
-
     if (activeInspection?.siteId === siteId) setActiveInspection(null);
     if (reportDetail?.siteId === siteId) setReportDetail(null);
     if (corpDetail?.siteId === siteId) setCorpDetail(null);
-
     setSiteDetailId(null);
     toast("Site removed.");
   };
@@ -184,9 +167,12 @@ function AppShell({ user }) {
       activeInspection.siteId === siteId &&
       activeInspection.scheduleId === scheduleId
     ) {
-      navigate("inspection");
+      window.location.assign("/inspection");
       return;
     }
+    // Stamp the active template onto every new inspection so future edits
+    // to the template don't retroactively change in-flight or saved reports.
+    const template = resolveActiveTemplate(customTemplate);
     if (activeInspection) {
       setConfirmDialog({
         title: "Discard in-progress walkthrough?",
@@ -199,12 +185,14 @@ function AppShell({ user }) {
             siteId,
             site,
             scheduleId,
+            template,
+            pumpPositions: Number(site.pumps) || 0,
             startedAt: new Date().toISOString(),
             answers: {},
             comments: {},
             photos: {},
           });
-          navigate("inspection");
+          window.location.assign("/inspection");
         },
       });
       return;
@@ -214,13 +202,14 @@ function AppShell({ user }) {
       siteId,
       site,
       scheduleId,
+      template,
       pumpPositions: Number(site.pumps) || 0,
       startedAt: new Date().toISOString(),
       answers: {},
       comments: {},
       photos: {},
     });
-    navigate("inspection");
+    window.location.assign("/inspection");
   };
 
   const resolveInspectorName = () => {
@@ -238,10 +227,13 @@ function AppShell({ user }) {
     if (!activeInspection) return;
     const answers = activeInspection.answers || {};
     const comments = activeInspection.comments || {};
-    const score = computeScore(answers);
-    const fails = SCHEMA.flatMap((sec) =>
+    // Score against the inspection's stamped template (or the default
+    // SCHEMA if this in-flight inspection predates template stamping).
+    const sections = activeInspection.template?.sections || SCHEMA;
+    const score = computeScore(answers, sections);
+    const fails = sections.flatMap((sec) =>
       sec.items
-        .filter((it) => answers[it.id] === "fail")
+        .filter((it) => isScored(it) && answers[it.id] === "fail")
         .map((it) => ({
           ...it,
           comment: comments[it.id] || "",
@@ -256,6 +248,7 @@ function AppShell({ user }) {
       siteId: activeInspection.siteId,
       completedAt: new Date().toISOString(),
       inspector: inspectorName,
+      template: activeInspection.template,
       score: score.earned,
       total: score.total,
       effectiveTotal: score.effectiveTotal,
@@ -288,11 +281,10 @@ function AppShell({ user }) {
 
     if (fails.length > 0) {
       const newIssues = fails.map((f) => {
-        const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
+        const sec = sections.find((s) => s.items.some((i) => i.id === f.id));
         const baseTime = Date.now();
         const baseId = `${baseTime}-${f.id}`;
         const photosForItem = activeInspection.photos?.[f.id] || [];
-
         const activity = [
           {
             id: `EV-${baseId}-create`,
@@ -302,9 +294,6 @@ function AppShell({ user }) {
             text: `Auto-created from inspection ${report.id}.`,
           },
         ];
-
-        // Bring the inspector's comment over as a note event so it shows up
-        // in the activity timeline alongside the rest of the conversation.
         if (f.comment) {
           activity.push({
             id: `EV-${baseId}-note`,
@@ -314,10 +303,6 @@ function AppShell({ user }) {
             text: f.comment,
           });
         }
-
-        // Each failed-item photo becomes an attachment event. We deliberately
-        // omit `path` so deleting this issue later doesn't wipe the photo
-        // from Storage — the report still owns the underlying file.
         for (let i = 0; i < photosForItem.length; i++) {
           const p = photosForItem[i];
           if (!p?.url) continue;
@@ -334,7 +319,6 @@ function AppShell({ user }) {
             },
           });
         }
-
         return {
           id: `ISS-${baseId}`,
           siteId: activeInspection.siteId,
@@ -365,8 +349,9 @@ function AppShell({ user }) {
     );
     setActiveInspection(null);
     setReportDetail(report);
-    navigate("reports");
+    window.location.assign("/reports");
   };
+
   const cancelInspection = () => {
     if (!activeInspection) return;
     setConfirmDialog({
@@ -375,18 +360,15 @@ function AppShell({ user }) {
       confirmLabel: "Discard",
       onConfirm: () => {
         setActiveInspection(null);
-        navigate("dashboard");
+        window.location.assign("/dashboard");
       },
     });
   };
   const leaveInspection = () => {
-    navigate("dashboard");
+    window.location.assign("/dashboard");
   };
 
   const updateIssue = (issue) => {
-    // No toast — IssueDetailModal fires this on every activity event
-    // (status change, note, attachment) and the timeline already gives
-    // visual feedback. A toast on each call would be noisy.
     setIssues((prev) => (prev || []).map((i) => (i.id === issue.id ? issue : i)));
   };
   const addIssue = (form) => {
@@ -439,7 +421,7 @@ function AppShell({ user }) {
     const entry = { id: form.id || `CORP-${Date.now()}`, ...form };
     setCorporate((prev) => [entry, ...(prev || [])]);
     setShowCorpForm(false);
-    toast("Corporate report archived.");
+    toast("Document archived.");
   };
 
   const deleteReport = (reportId) => {
@@ -466,7 +448,7 @@ function AppShell({ user }) {
     if (target?.pdf?.path) deletePhoto(target.pdf.path);
     setCorporate((prev) => (prev || []).filter((c) => c.id !== corpId));
     if (corpDetail?.id === corpId) setCorpDetail(null);
-    toast("Corporate report deleted.");
+    toast("Document deleted.");
   };
 
   const saveInspector = (entry) => {
@@ -509,6 +491,53 @@ function AppShell({ user }) {
     toast("Default inspector updated.");
   };
 
+  const value = useMemo(
+    () => ({
+      user,
+      // data
+      sites: sitesEnriched,
+      rawSites: sites,
+      scheduled,
+      issues,
+      completed,
+      corporate,
+      inspectors,
+      activeInspection,
+      customTemplate, setCustomTemplate,
+      // ui state
+      issueDetail, setIssueDetail,
+      reportDetail, setReportDetail,
+      corpDetail, setCorpDetail,
+      siteDetailId, setSiteDetailId,
+      showSiteForm, setShowSiteForm,
+      editingSite, setEditingSite,
+      showCorpForm, setShowCorpForm,
+      showInspectorForm, setShowInspectorForm,
+      editingInspector, setEditingInspector,
+      showIssueForm, setShowIssueForm,
+      confirmDialog, setConfirmDialog,
+      moreOpen, setMoreOpen,
+      toasts,
+      // operations
+      toast,
+      signOut,
+      addSite, updateSite, deleteSite,
+      startInspection, completeInspection, cancelInspection, leaveInspection,
+      setActiveInspection,
+      resolveInspectorName,
+      updateIssue, addIssue, deleteIssue,
+      addScheduled, updateScheduled, deleteScheduled,
+      addCorporate, deleteCorporate, deleteReport,
+      saveInspector, deleteInspector, makeInspectorDefault,
+    }),
+    [
+      user, sitesEnriched, sites, scheduled, issues, completed, corporate, inspectors, activeInspection,
+      customTemplate,
+      issueDetail, reportDetail, corpDetail, siteDetailId, showSiteForm, editingSite,
+      showCorpForm, showInspectorForm, editingInspector, showIssueForm, confirmDialog, moreOpen, toasts,
+    ]
+  );
+
   if (!data) return <FullScreenLoader label="Loading your inspections…" />;
   if (error) {
     return (
@@ -527,245 +556,11 @@ function AppShell({ user }) {
     );
   }
 
-  const siteDetail = siteDetailId ? sitesEnriched.find((s) => s.id === siteDetailId) : null;
+  return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
+}
 
-  return (
-    <div className="h-[100dvh] flex bg-stone-50 text-stone-900 overflow-hidden">
-      <Sidebar
-        view={view}
-        setView={navigate}
-        activeInspection={activeInspection}
-        userEmail={user.email}
-        onSignOut={signOut}
-      />
-
-      <main className="flex-1 flex flex-col min-w-0">
-        <TopBar view={view} siteDetail={siteDetail} />
-
-        <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
-          {view === "dashboard" && (
-            <Dashboard
-              setView={navigate}
-              startInspection={startInspection}
-              sites={sitesEnriched}
-              scheduled={scheduled || []}
-              issues={issues || []}
-              completed={completed || []}
-              setIssueDetail={setIssueDetail}
-              activeInspection={activeInspection}
-            />
-          )}
-
-          {view === "sites" && !siteDetail && (
-            <SitesView
-              sites={sitesEnriched}
-              startInspection={startInspection}
-              onAdd={() => { setEditingSite(null); setShowSiteForm(true); }}
-              onEdit={(s) => { setEditingSite(s); setShowSiteForm(true); }}
-              onDelete={(s) =>
-                setConfirmDialog({
-                  title: `Delete ${s.name}?`,
-                  message: "Also removes every schedule, issue, report, corporate entry, and photo tied to this site. Cannot be undone.",
-                  onConfirm: () => deleteSite(s.id),
-                })
-              }
-              onView={(s) => setSiteDetailId(s.id)}
-            />
-          )}
-
-          {view === "sites" && siteDetail && (
-            <SiteDetailView
-              site={siteDetail}
-              scheduled={scheduled || []}
-              issues={issues || []}
-              completed={completed || []}
-              corporate={corporate || []}
-              onBack={() => setSiteDetailId(null)}
-              onEdit={(s) => { setEditingSite(s); setShowSiteForm(true); }}
-              onDelete={(s) =>
-                setConfirmDialog({
-                  title: `Delete ${s.name}?`,
-                  message: "Also removes every schedule, issue, report, corporate entry, and photo tied to this site. Cannot be undone.",
-                  onConfirm: () => deleteSite(s.id),
-                })
-              }
-              onStartInspection={startInspection}
-              setIssueDetail={setIssueDetail}
-              setReportDetail={setReportDetail}
-              setCorpDetail={setCorpDetail}
-              setView={navigate}
-            />
-          )}
-
-          {view === "schedule" && (
-            <ScheduleView
-              sites={sitesEnriched}
-              scheduled={scheduled || []}
-              inspectors={inspectors || []}
-              addScheduled={addScheduled}
-              updateScheduled={updateScheduled}
-              startInspection={startInspection}
-              onDelete={deleteScheduled}
-            />
-          )}
-
-          {view === "inspection" && (
-            <InspectionView
-              inspection={activeInspection}
-              setInspection={setActiveInspection}
-              onComplete={completeInspection}
-              onLeave={leaveInspection}
-              onDiscard={cancelInspection}
-              user={user}
-              inspectorName={resolveInspectorName()}
-            />
-          )}
-
-          {view === "reports" && (
-            <ReportsView
-              reports={completed || []}
-              sites={sitesEnriched}
-              detail={reportDetail}
-              setDetail={setReportDetail}
-              onDelete={(r) =>
-                setConfirmDialog({
-                  title: "Delete this report?",
-                  message: "Removes the report and any photos attached to it from cloud storage. Cannot be undone.",
-                  confirmLabel: "Delete",
-                  onConfirm: () => deleteReport(r.id),
-                })
-              }
-            />
-          )}
-
-          {view === "corporate" && (
-            <CorporateView
-              corporate={corporate || []}
-              sites={sitesEnriched}
-              completed={completed || []}
-              detail={corpDetail}
-              setDetail={setCorpDetail}
-              onAdd={() => setShowCorpForm(true)}
-              onDelete={(c) =>
-                setConfirmDialog({
-                  title: "Delete this corporate report?",
-                  message: "Removes the archived entry and the attached PDF, if any. Cannot be undone.",
-                  confirmLabel: "Delete",
-                  onConfirm: () => deleteCorporate(c.id),
-                })
-              }
-            />
-          )}
-
-          {view === "issues" && (
-            <IssuesView
-              issues={issues || []}
-              sites={sitesEnriched}
-              setIssueDetail={setIssueDetail}
-              onAdd={() => setShowIssueForm(true)}
-            />
-          )}
-
-          {view === "inspectors" && (
-            <InspectorsView
-              inspectors={inspectors || []}
-              onAdd={() => { setEditingInspector(null); setShowInspectorForm(true); }}
-              onEdit={(p) => { setEditingInspector(p); setShowInspectorForm(true); }}
-              onDelete={(p) =>
-                setConfirmDialog({
-                  title: `Remove ${p.name}?`,
-                  message: "Existing reports keep this name. Future reports will use the default.",
-                  confirmLabel: "Remove",
-                  onConfirm: () => deleteInspector(p.id),
-                })
-              }
-              onMakeDefault={(p) => makeInspectorDefault(p.id)}
-            />
-          )}
-        </div>
-
-        <MobileBottomNav
-          view={view}
-          setView={navigate}
-          onMore={() => setMoreOpen(!moreOpen)}
-          activeInspection={activeInspection}
-          moreOpen={moreOpen}
-        />
-      </main>
-
-      {moreOpen && (
-        <MobileMoreSheet
-          view={view}
-          setView={navigate}
-          activeInspection={activeInspection}
-          onClose={() => setMoreOpen(false)}
-          userEmail={user.email}
-          onSignOut={signOut}
-        />
-      )}
-
-      {showSiteForm && (
-        <SiteFormModal
-          site={editingSite}
-          onSubmit={editingSite ? updateSite : addSite}
-          onClose={() => { setShowSiteForm(false); setEditingSite(null); }}
-        />
-      )}
-
-      {showCorpForm && (
-        <CorporateForm sites={sitesEnriched} onSubmit={addCorporate} onClose={() => setShowCorpForm(false)} user={user} />
-      )}
-
-      {showInspectorForm && (
-        <InspectorFormModal
-          inspector={editingInspector}
-          onSubmit={saveInspector}
-          onClose={() => { setShowInspectorForm(false); setEditingInspector(null); }}
-        />
-      )}
-
-      {showIssueForm && (
-        <IssueFormModal
-          sites={sitesEnriched}
-          inspectors={inspectors || []}
-          onSubmit={addIssue}
-          onClose={() => setShowIssueForm(false)}
-        />
-      )}
-
-      {issueDetail && (
-        <IssueDetailModal
-          // Pull the live record out of the issues array so status changes
-          // and new activity events render immediately. Fall back to the
-          // captured snapshot if the row was just deleted out from under us.
-          issue={(issues || []).find((i) => i.id === issueDetail.id) || issueDetail}
-          sites={sitesEnriched}
-          user={user}
-          inspectorName={resolveInspectorName()}
-          onUpdate={updateIssue}
-          onDelete={(iss) =>
-            setConfirmDialog({
-              title: "Delete this issue?",
-              message: "Removes the issue from the tracker permanently.",
-              confirmLabel: "Delete",
-              onConfirm: () => deleteIssue(iss.id),
-            })
-          }
-          onClose={() => setIssueDetail(null)}
-        />
-      )}
-
-      {confirmDialog && (
-        <ConfirmDialog
-          title={confirmDialog.title}
-          message={confirmDialog.message}
-          confirmLabel={confirmDialog.confirmLabel}
-          onConfirm={confirmDialog.onConfirm}
-          onClose={() => setConfirmDialog(null)}
-        />
-      )}
-
-      <Toasts toasts={toasts} />
-    </div>
-  );
+export function useAppState() {
+  const ctx = useContext(AppStateContext);
+  if (!ctx) throw new Error("useAppState must be used inside <AppStateProvider>");
+  return ctx;
 }

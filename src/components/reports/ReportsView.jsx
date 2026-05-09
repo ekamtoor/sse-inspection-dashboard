@@ -116,8 +116,9 @@ export default function ReportsView({ reports, sites, detail, setDetail, onDelet
             {filtered.map((r) => {
               const site = sites.find((s) => s.id === r.siteId);
               const fails = r.fails || [];
+              const reportSections = r.template?.sections || SCHEMA;
               const ztFails = fails.filter((f) =>
-                SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id))
+                reportSections.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id))
               );
               const passed = typeof r.passed === "boolean" ? r.passed : null;
               return (
