@@ -3,7 +3,7 @@ import {
   ChevronLeft, ClipboardCheck, FileText, ShieldAlert, Trash2,
   Send, Paperclip, Loader2, X, Image as ImageIcon, FileText as FileIcon, Download,
 } from "lucide-react";
-import { SCHEMA, getInspectionSchema } from "../../data/schema.js";
+import { SCHEMA, getInspectionSchema, isScored } from "../../data/schema.js";
 import { computeScore } from "../../lib/scoring.js";
 import { uploadPhoto, deletePhoto, uploadFile, deleteFile } from "../../lib/photos.js";
 import SectionBlock from "./SectionBlock.jsx";
@@ -148,13 +148,20 @@ export default function InspectionView({
   const notes = inspection.notes || [];
 
   // Full schema (scored sections + dynamic Pumps section sized to this site).
-  // computeScore stays on the static SCHEMA so per-pump checks never count
-  // toward the 200-pt total.
+  // computeScore walks the inspection's stamped template (or the default
+  // SCHEMA if absent) so custom imported templates score correctly. Per-pump
+  // checks still contribute 0 points by design.
   const fullSchema = useMemo(() => getInspectionSchema(inspection), [inspection]);
-  const score = useMemo(() => computeScore(inspection.answers), [inspection.answers]);
-  const failed = fullSchema.flatMap((sec) => sec.items.filter((it) => inspection.answers[it.id] === "fail"));
-  const ztFailed = SCHEMA.filter((s) => s.zeroTolerance)
-    .flatMap((sec) => sec.items.filter((it) => inspection.answers[it.id] === "fail")).length;
+  const scoredSections = inspection.template?.sections || SCHEMA;
+  const score = useMemo(
+    () => computeScore(inspection.answers, scoredSections),
+    [inspection.answers, scoredSections]
+  );
+  const failed = fullSchema.flatMap((sec) =>
+    sec.items.filter((it) => isScored(it) && inspection.answers[it.id] === "fail")
+  );
+  const ztFailed = scoredSections.filter((s) => s.zeroTolerance)
+    .flatMap((sec) => sec.items.filter((it) => isScored(it) && inspection.answers[it.id] === "fail")).length;
   const pct = (score.answered / score.totalItems) * 100;
   const livePassing = score.answered > 0 && score.passed;
   const liveFailing = score.answered > 0 && !score.passed;

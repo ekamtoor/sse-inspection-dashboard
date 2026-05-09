@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
-import { SCHEMA, PASSING_PERCENTAGE, getInspectionSchema } from "../data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE, getInspectionSchema, isScored, getResponseType } from "../data/schema.js";
+import { getBranding } from "./branding.js";
 
 // A4 portrait, mm units. Designed to print or share via OS-level share sheet.
 const PAGE_W = 210;
@@ -102,10 +103,14 @@ async function preloadNoteAttachments(report) {
   return out;
 }
 
-// Logo loaded as PNG to preserve any transparent background.
+// Logo loaded as PNG to preserve any transparent background. URL is read from
+// branding so onboarding a new tenant only requires updating one file (and
+// dropping their logo into /public).
 async function loadBrandLogo() {
+  const { parentLogoUrl } = getBranding();
+  if (!parentLogoUrl) return null;
   try {
-    const img = await loadImage("/seven-star-logo.png");
+    const img = await loadImage(parentLogoUrl);
     const maxPx = 400;
     const longSide = Math.max(img.naturalWidth, img.naturalHeight);
     const scale = longSide > maxPx ? maxPx / longSide : 1;
@@ -138,8 +143,10 @@ function deriveSummary(report) {
   let naPoints = 0;
   let failedCriticalItems = 0;
   let failedZTItems = 0;
-  for (const sec of SCHEMA) {
+  const sections = report.template?.sections || SCHEMA;
+  for (const sec of sections) {
     for (const it of sec.items) {
+      if (!isScored(it)) continue;
       totalConfigured += it.pts;
       const v = report.answers?.[it.id];
       if (v === "pass") earned += it.pts;
@@ -319,8 +326,9 @@ export async function generateReportPDF({ report, site }) {
   }
 
   // ---- ZT violation banner ----
+  const reportSections = report.template?.sections || SCHEMA;
   const ztFails = (report.fails || []).filter((f) => {
-    const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
+    const sec = reportSections.find((s) => s.items.some((i) => i.id === f.id));
     return sec?.zeroTolerance;
   });
   if (ztFails.length > 0) {
@@ -351,13 +359,13 @@ export async function generateReportPDF({ report, site }) {
   pdf.text("By Section", M, y + 4);
   y += 8;
 
-  for (const sec of SCHEMA) {
+  for (const sec of reportSections) {
     if (sec.documentation) continue; // skip 0-pt sections from the score overview
-    const items = sec.items;
-    const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
-    const total = items.reduce((a, it) => a + it.pts, 0);
-    const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
-    const fails = items.filter((it) => report.answers?.[it.id] === "fail").length;
+    const scoredItems = sec.items.filter(isScored);
+    const earned = scoredItems.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
+    const total = scoredItems.reduce((a, it) => a + it.pts, 0);
+    const naPts = scoredItems.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
+    const fails = scoredItems.filter((it) => report.answers?.[it.id] === "fail").length;
     const effective = total - naPts;
     if (total === 0 && fails === 0) continue;
 
@@ -411,12 +419,13 @@ export async function generateReportPDF({ report, site }) {
   for (const sec of fullSchema) {
     const items = sec.items;
     if (!items || items.length === 0) continue;
-    const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
-    const total = items.reduce((a, it) => a + it.pts, 0);
-    const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
-    const fails = items.filter((it) => report.answers?.[it.id] === "fail").length;
-    const naCount = items.filter((it) => report.answers?.[it.id] === "na").length;
-    const passCount = items.filter((it) => report.answers?.[it.id] === "pass").length;
+    const scoredItems = items.filter(isScored);
+    const earned = scoredItems.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
+    const total = scoredItems.reduce((a, it) => a + it.pts, 0);
+    const naPts = scoredItems.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
+    const fails = scoredItems.filter((it) => report.answers?.[it.id] === "fail").length;
+    const naCount = scoredItems.filter((it) => report.answers?.[it.id] === "na").length;
+    const passCount = scoredItems.filter((it) => report.answers?.[it.id] === "pass").length;
     const effective = total - naPts;
 
     // Section header band — taller for documentation sections so the
@@ -489,14 +498,27 @@ export async function generateReportPDF({ report, site }) {
       setText(pdf, COLOR.ink);
       pdf.text(qLines, Q_COL_X, y + ROW_PAD_Y + 3);
 
-      // Status pill on the right
-      const statusInfo = ans === "pass"
-        ? { label: "PASS", fill: COLOR.emerald, color: [255, 255, 255] }
-        : ans === "fail"
-          ? { label: "FAIL", fill: COLOR.red, color: [255, 255, 255] }
-          : ans === "na"
-            ? { label: "N/A", fill: COLOR.stone700, color: [255, 255, 255] }
-            : { label: "—", fill: null, color: COLOR.muted };
+      // Status pill on the right. Pass/Fail/N/A get a colored pill; for
+      // number / text / select items we render the answer value verbatim
+      // (truncated). Empty answers stay as a dash.
+      const rt = getResponseType(it);
+      const hasAns = ans != null && ans !== "";
+      let statusInfo;
+      if (rt === "pass_fail") {
+        statusInfo = ans === "pass"
+          ? { label: "PASS", fill: COLOR.emerald, color: [255, 255, 255] }
+          : ans === "fail"
+            ? { label: "FAIL", fill: COLOR.red, color: [255, 255, 255] }
+            : ans === "na"
+              ? { label: "N/A", fill: COLOR.stone700, color: [255, 255, 255] }
+              : { label: "—", fill: null, color: COLOR.muted };
+      } else if (!hasAns) {
+        statusInfo = { label: "—", fill: null, color: COLOR.muted };
+      } else {
+        const raw = rt === "number" && it.unit ? `${ans} ${it.unit}` : String(ans);
+        const trimmed = raw.length > 22 ? `${raw.slice(0, 21)}…` : raw;
+        statusInfo = { label: trimmed, fill: COLOR.surface, color: COLOR.ink };
+      }
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(7);
@@ -654,6 +676,7 @@ export async function generateReportPDF({ report, site }) {
   }
 
   // ---- Footer page numbers ----
+  const { pdfFooterPrefix } = getBranding();
   const pageCount = pdf.getNumberOfPages();
   const footerY = PAGE_H - 6;
   for (let i = 1; i <= pageCount; i++) {
@@ -661,7 +684,7 @@ export async function generateReportPDF({ report, site }) {
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     setText(pdf, COLOR.muted);
-    pdf.text(`Vanguard · by Seven Star Energy · ${site?.name || ""} · ${dateStr}`, M, footerY);
+    pdf.text(`${pdfFooterPrefix} · ${site?.name || ""} · ${dateStr}`, M, footerY);
     const right = `Page ${i} of ${pageCount}`;
     pdf.text(right, PAGE_W - M - pdf.getTextWidth(right), footerY);
   }
@@ -670,8 +693,9 @@ export async function generateReportPDF({ report, site }) {
 }
 
 export function reportFilename(report, site) {
+  const { pdfFilenamePrefix } = getBranding();
   const dt = new Date(report.completedAt);
   const ymd = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
   const safe = (site?.name || "Report").replace(/[^a-zA-Z0-9-]+/g, "-").replace(/^-|-$/g, "");
-  return `Vanguard-${safe}-${ymd}.pdf`;
+  return `${pdfFilenamePrefix}-${safe}-${ymd}.pdf`;
 }

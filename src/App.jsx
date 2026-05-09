@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "./lib/supabase.js";
 import { DataProvider, useDataContext, useUserDataKey } from "./hooks/useUserData.jsx";
 import LoginScreen from "./components/auth/LoginScreen.jsx";
-import { SCHEMA, PASSING_PERCENTAGE } from "./data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE, resolveActiveTemplate, isScored } from "./data/schema.js";
 import { computeScore } from "./lib/scoring.js";
 import { deletePhoto } from "./lib/photos.js";
 
@@ -29,6 +29,7 @@ import IssueDetailModal from "./components/issues/IssueDetailModal.jsx";
 import IssueFormModal from "./components/issues/IssueFormModal.jsx";
 import InspectorsView from "./components/inspectors/InspectorsView.jsx";
 import InspectorFormModal from "./components/inspectors/InspectorFormModal.jsx";
+import TemplateEditor from "./components/templates/TemplateEditor.jsx";
 
 function FullScreenLoader({ label }) {
   return (
@@ -68,6 +69,7 @@ function AppShell({ user }) {
   const [completed, setCompleted]             = useUserDataKey("reports");
   const [corporate, setCorporate]             = useUserDataKey("corporate");
   const [inspectors, setInspectors]           = useUserDataKey("inspectors");
+  const [customTemplate, setCustomTemplate]   = useUserDataKey("template");
 
   const [view, setViewRaw] = useUserDataKey("view");
   const [activeInspection, setActiveInspection] = useUserDataKey("active_inspection");
@@ -187,6 +189,9 @@ function AppShell({ user }) {
       navigate("inspection");
       return;
     }
+    // Stamp the active template onto every new inspection so future edits
+    // to the template don't retroactively change in-flight or saved reports.
+    const template = resolveActiveTemplate(customTemplate);
     if (activeInspection) {
       setConfirmDialog({
         title: "Discard in-progress walkthrough?",
@@ -199,6 +204,7 @@ function AppShell({ user }) {
             siteId,
             site,
             scheduleId,
+            template,
             startedAt: new Date().toISOString(),
             answers: {},
             comments: {},
@@ -214,6 +220,7 @@ function AppShell({ user }) {
       siteId,
       site,
       scheduleId,
+      template,
       pumpPositions: Number(site.pumps) || 0,
       startedAt: new Date().toISOString(),
       answers: {},
@@ -238,10 +245,13 @@ function AppShell({ user }) {
     if (!activeInspection) return;
     const answers = activeInspection.answers || {};
     const comments = activeInspection.comments || {};
-    const score = computeScore(answers);
-    const fails = SCHEMA.flatMap((sec) =>
+    // Score against the inspection's stamped template (or the default
+    // SCHEMA if this in-flight inspection predates template stamping).
+    const sections = activeInspection.template?.sections || SCHEMA;
+    const score = computeScore(answers, sections);
+    const fails = sections.flatMap((sec) =>
       sec.items
-        .filter((it) => answers[it.id] === "fail")
+        .filter((it) => isScored(it) && answers[it.id] === "fail")
         .map((it) => ({
           ...it,
           comment: comments[it.id] || "",
@@ -256,6 +266,7 @@ function AppShell({ user }) {
       siteId: activeInspection.siteId,
       completedAt: new Date().toISOString(),
       inspector: inspectorName,
+      template: activeInspection.template,
       score: score.earned,
       total: score.total,
       effectiveTotal: score.effectiveTotal,
@@ -288,7 +299,7 @@ function AppShell({ user }) {
 
     if (fails.length > 0) {
       const newIssues = fails.map((f) => {
-        const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
+        const sec = sections.find((s) => s.items.some((i) => i.id === f.id));
         const baseTime = Date.now();
         const baseId = `${baseTime}-${f.id}`;
         const photosForItem = activeInspection.photos?.[f.id] || [];
@@ -680,6 +691,14 @@ function AppShell({ user }) {
                 })
               }
               onMakeDefault={(p) => makeInspectorDefault(p.id)}
+            />
+          )}
+
+          {view === "templates" && (
+            <TemplateEditor
+              customTemplate={customTemplate}
+              setCustomTemplate={setCustomTemplate}
+              onToast={toast}
             />
           )}
         </div>

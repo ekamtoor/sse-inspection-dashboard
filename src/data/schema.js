@@ -9,6 +9,17 @@
 //   3. Score >= 85% of effective total
 //
 // Section point totals: 50 + 40 + 20 + 22 + 12 + 8 + 20 + 16 + 12 = 200
+//
+// Item shape (responseType extension):
+//   id        : string
+//   q         : question text
+//   pts       : points (only meaningful for pass_fail items)
+//   responseType (optional, default "pass_fail")
+//      "pass_fail"  → 3-button row, contributes to score
+//      "number"     → numeric input (optional `unit`, `min`, `max`); informational
+//      "text"       → free-text input; informational
+//      "select"     → dropdown with `options: string[]`; informational
+//   Items without responseType behave exactly like the original Pass/Fail/N/A.
 
 export const SCHEMA = [
   {
@@ -169,14 +180,17 @@ export function resolvePumpPositions(input) {
   return 0;
 }
 
-// Combine the static scored SCHEMA with the dynamic Pumps section.
-// Components that render every item in an inspection (InspectionView,
-// ReportDetail, PDF) should use this; scoring stays on the static SCHEMA so
-// per-pump checks never leak into the 200-point total.
+// Combine the inspection's stamped sections (or the default SCHEMA) with the
+// dynamic Pumps section. Components that render every item in an inspection
+// (InspectionView, ReportDetail, PDF) should use this; scoring rolls up the
+// scored items in the same set, but per-pump checks contribute 0 points.
 export function getInspectionSchema(input) {
+  const baseSections = input?.template?.sections?.length > 0
+    ? input.template.sections
+    : SCHEMA;
   const positions = resolvePumpPositions(input);
   const pumps = buildPumpsSection(positions);
-  return pumps ? [...SCHEMA, pumps] : SCHEMA;
+  return pumps ? [...baseSections, pumps] : baseSections;
 }
 
 // Sanity check for future edits — keeps the rubric honest at 200 points.
@@ -187,3 +201,49 @@ export const TOTAL_POINTS = SCHEMA.reduce(
 
 // Threshold for the percentage component of the pass/fail rule.
 export const PASSING_PERCENTAGE = 0.85;
+
+// ---------- Response-type helpers ----------
+export const RESPONSE_TYPES = ["pass_fail", "number", "text", "select"];
+
+export function getResponseType(item) {
+  return item?.responseType || "pass_fail";
+}
+
+export function isScored(item) {
+  return getResponseType(item) === "pass_fail";
+}
+
+// ---------- Template stamping ----------
+// At inspection start, we stamp the active template onto the inspection so
+// the runner / report / PDF all read from the inspection's own template.
+// That way, edits to the active template don't retroactively change old
+// reports — each report keeps the structure it was generated against.
+//
+// Stored shape:
+//   inspection.template = { name, sections, passingPercentage, version }
+//
+// Existing in-flight inspections without a stamped template fall back to
+// the static SCHEMA, so legacy data keeps working unchanged.
+export function buildDefaultTemplate() {
+  return {
+    name: "SSE 200-Point Pre-Inspection",
+    version: 1,
+    passingPercentage: PASSING_PERCENTAGE,
+    sections: SCHEMA,
+  };
+}
+
+// Active template resolution. If a custom template was imported / saved
+// (via the template editor), it lives in user data and is passed in here.
+// Otherwise we hand back the built-in default.
+export function resolveActiveTemplate(customTemplate) {
+  if (customTemplate?.sections?.length > 0) return customTemplate;
+  return buildDefaultTemplate();
+}
+
+// Read a template off an inspection (or the default if absent). Used by the
+// runner, reports, and PDF so they can all share one resolution path.
+export function getInspectionTemplate(inspection) {
+  if (inspection?.template?.sections?.length > 0) return inspection.template;
+  return buildDefaultTemplate();
+}
