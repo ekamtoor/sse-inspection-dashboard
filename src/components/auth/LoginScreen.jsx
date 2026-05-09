@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Shield, Mail, Loader2 } from "lucide-react";
 import { supabase } from "../../lib/supabase/client.js";
+import { getBranding } from "../../lib/branding.js";
 
 export default function LoginScreen() {
+  const branding = getBranding();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState("email");
@@ -61,9 +63,9 @@ export default function LoginScreen() {
             <Shield className="w-5 h-5 text-stone-900" strokeWidth={2.5} />
           </div>
           <div>
-            <div className="font-display font-semibold text-lg leading-none">Vanguard</div>
+            <div className="font-display font-semibold text-lg leading-none">{branding.appName}</div>
             <div className="text-[10px] text-stone-500 uppercase tracking-widest mt-1">
-              Pre-Inspection
+              {branding.appEyebrow}
             </div>
           </div>
         </div>
@@ -176,12 +178,14 @@ export default function LoginScreen() {
         </div>
 
         <div className="mt-7 flex flex-col items-center gap-2">
-          <img
-            src="/seven-star-logo.png"
-            alt="Seven Star Energy"
-            className="h-16 w-auto object-contain opacity-90"
-            onError={(e) => { e.currentTarget.style.display = "none"; }}
-          />
+          {branding.parentLogoUrl && (
+            <img
+              src={branding.parentLogoUrl}
+              alt={branding.parentLogoAlt || branding.parentName}
+              className="h-16 w-auto object-contain opacity-90"
+              onError={(e) => { e.currentTarget.style.display = "none"; }}
+            />
+          )}
           <p className="text-[11px] text-stone-400 leading-relaxed">Internal use only</p>
         </div>
       </div>

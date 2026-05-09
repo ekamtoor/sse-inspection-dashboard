@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { CheckCircle2, XCircle, MinusCircle, Camera, X, Loader2 } from "lucide-react";
+import { getResponseType } from "../../data/schema.js";
 
 // Cap photos per item so a runaway upload doesn't bloat a single inspection.
 // 5 fits the common "snap a few angles" use case without getting silly.
@@ -13,6 +14,9 @@ export default function ItemRow({
   const photoCount = photoList?.length || 0;
   const inflight = uploadingCount || 0;
   const remaining = Math.max(0, PHOTO_LIMIT - photoCount - inflight);
+  const responseType = getResponseType(item);
+  const hasAnswer = answer != null && answer !== "";
+
   return (
     <div className="px-4 md:px-6 py-4 md:py-5">
       <div className="flex items-start gap-3 md:gap-4">
@@ -27,41 +31,49 @@ export default function ItemRow({
                 affects {item.affects}
               </span>
             )}
+            {responseType !== "pass_fail" && (
+              <span className="ml-2 text-[10px] uppercase tracking-wider text-stone-400 font-mono">
+                {responseType}
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-1.5 mt-3 flex-wrap">
-            <button
-              onClick={() => setAnswer("pass")}
-              className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 flex-1 md:flex-initial justify-center ${
-                answer === "pass"
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "bg-stone-50 text-stone-600 hover:bg-emerald-50 hover:text-emerald-700 border border-stone-200"
-              }`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" /> Pass
-            </button>
-            <button
-              onClick={() => setAnswer("fail")}
-              className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 flex-1 md:flex-initial justify-center ${
-                answer === "fail"
-                  ? "bg-red-600 text-white shadow-sm"
-                  : "bg-stone-50 text-stone-600 hover:bg-red-50 hover:text-red-700 border border-stone-200"
-              }`}
-            >
-              <XCircle className="w-3.5 h-3.5" /> Fail
-            </button>
-            <button
-              onClick={() => setAnswer("na")}
-              className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 flex-1 md:flex-initial justify-center ${
-                answer === "na"
-                  ? "bg-stone-700 text-white shadow-sm"
-                  : "bg-stone-50 text-stone-600 hover:bg-stone-100 hover:text-stone-900 border border-stone-200"
-              }`}
-            >
-              <MinusCircle className="w-3.5 h-3.5" /> N/A
-            </button>
-            {item.pts > 0 && <span className="ml-1 font-mono text-[10px] text-stone-400 flex-shrink-0">+{item.pts}</span>}
-          </div>
-          {(answer || comment || photoCount > 0 || inflight > 0) && (
+
+          {responseType === "pass_fail" && (
+            <PassFailWidget
+              answer={answer}
+              setAnswer={setAnswer}
+              points={item.pts}
+            />
+          )}
+
+          {responseType === "number" && (
+            <NumberWidget
+              answer={answer}
+              setAnswer={setAnswer}
+              unit={item.unit}
+              min={item.min}
+              max={item.max}
+              placeholder={item.placeholder}
+            />
+          )}
+
+          {responseType === "text" && (
+            <TextWidget
+              answer={answer}
+              setAnswer={setAnswer}
+              placeholder={item.placeholder}
+            />
+          )}
+
+          {responseType === "select" && (
+            <SelectWidget
+              answer={answer}
+              setAnswer={setAnswer}
+              options={item.options || []}
+            />
+          )}
+
+          {(hasAnswer || comment || photoCount > 0 || inflight > 0) && (
             <div className="mt-3 space-y-3">
               <textarea
                 value={comment || ""}
@@ -133,3 +145,101 @@ export default function ItemRow({
   );
 }
 
+function PassFailWidget({ answer, setAnswer, points }) {
+  return (
+    <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+      <button
+        onClick={() => setAnswer("pass")}
+        className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 flex-1 md:flex-initial justify-center ${
+          answer === "pass"
+            ? "bg-emerald-600 text-white shadow-sm"
+            : "bg-stone-50 text-stone-600 hover:bg-emerald-50 hover:text-emerald-700 border border-stone-200"
+        }`}
+      >
+        <CheckCircle2 className="w-3.5 h-3.5" /> Pass
+      </button>
+      <button
+        onClick={() => setAnswer("fail")}
+        className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 flex-1 md:flex-initial justify-center ${
+          answer === "fail"
+            ? "bg-red-600 text-white shadow-sm"
+            : "bg-stone-50 text-stone-600 hover:bg-red-50 hover:text-red-700 border border-stone-200"
+        }`}
+      >
+        <XCircle className="w-3.5 h-3.5" /> Fail
+      </button>
+      <button
+        onClick={() => setAnswer("na")}
+        className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 flex-1 md:flex-initial justify-center ${
+          answer === "na"
+            ? "bg-stone-700 text-white shadow-sm"
+            : "bg-stone-50 text-stone-600 hover:bg-stone-100 hover:text-stone-900 border border-stone-200"
+        }`}
+      >
+        <MinusCircle className="w-3.5 h-3.5" /> N/A
+      </button>
+      {points > 0 && <span className="ml-1 font-mono text-[10px] text-stone-400 flex-shrink-0">+{points}</span>}
+    </div>
+  );
+}
+
+function NumberWidget({ answer, setAnswer, unit, min, max, placeholder }) {
+  const hint = [
+    min != null ? `min ${min}` : null,
+    max != null ? `max ${max}` : null,
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      <input
+        type="number"
+        inputMode="decimal"
+        value={answer ?? ""}
+        onChange={(e) => setAnswer(e.target.value === "" ? "" : Number(e.target.value))}
+        placeholder={placeholder || "Enter a number"}
+        min={min}
+        max={max}
+        className="w-40 text-sm bg-stone-50 border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:border-stone-400"
+      />
+      {unit && <span className="text-xs text-stone-500 font-mono">{unit}</span>}
+      {hint && <span className="text-[10px] uppercase tracking-wider text-stone-400 ml-auto">{hint}</span>}
+    </div>
+  );
+}
+
+function TextWidget({ answer, setAnswer, placeholder }) {
+  return (
+    <div className="mt-3">
+      <input
+        type="text"
+        value={answer ?? ""}
+        onChange={(e) => setAnswer(e.target.value)}
+        placeholder={placeholder || "Type your answer"}
+        className="w-full text-sm bg-stone-50 border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:border-stone-400"
+      />
+    </div>
+  );
+}
+
+function SelectWidget({ answer, setAnswer, options }) {
+  return (
+    <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+      {options.length === 0 ? (
+        <span className="text-xs text-stone-400 italic">No options configured for this item.</span>
+      ) : (
+        options.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => setAnswer(answer === opt ? "" : opt)}
+            className={`px-3 py-2 md:py-1.5 rounded-md text-xs font-medium ${
+              answer === opt
+                ? "bg-stone-900 text-white shadow-sm"
+                : "bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200"
+            }`}
+          >
+            {opt}
+          </button>
+        ))
+      )}
+    </div>
+  );
+}

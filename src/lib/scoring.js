@@ -1,10 +1,18 @@
-import { SCHEMA, PASSING_PERCENTAGE } from "../data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE, isScored } from "../data/schema.js";
 
 // Walk the schema once and roll up every metric the UI and PDF need:
 // earned/total points, the effective denominator after N/A items are dropped,
 // counts of failed items broken down by section type, and a final pass/fail
 // verdict against the rule set in schema.js.
-export function computeScore(answers) {
+//
+// Only items with responseType === "pass_fail" (or items without a
+// responseType, the legacy default) contribute to the score. Number / text /
+// select items are informational and never affect the verdict.
+//
+// `sections` defaults to the built-in 200-pt SCHEMA. Pass an inspection's
+// stamped template sections in for custom templates so old reports re-score
+// against the structure they were generated against.
+export function computeScore(answers, sections = SCHEMA) {
   const a = answers || {};
   let earned = 0;
   let totalConfigured = 0;
@@ -15,8 +23,18 @@ export function computeScore(answers) {
   let failedCriticalItems = 0;
   let failedZTItems = 0;
 
-  for (const sec of SCHEMA) {
+  for (const sec of sections) {
     for (const it of sec.items) {
+      // Non-pass-fail items don't participate in scoring at all — but if the
+      // user typed an answer, count it toward "answered" so the progress bar
+      // reflects activity. They never count toward totalItems either, so the
+      // progress denominator stays meaningful.
+      if (!isScored(it)) {
+        const v = a[it.id];
+        if (v != null && v !== "") answered += 1;
+        continue;
+      }
+
       totalItems += 1;
       totalConfigured += it.pts;
       const v = a[it.id];
@@ -65,7 +83,7 @@ export function passFailVerdict(score) {
   if (!score) return { passed: false, label: "—", reasons: [] };
   const reasons = [];
   if (score.failReasons.zeroTolerance) reasons.push("Zero-tolerance violation");
-  if (score.failReasons.critical) reasons.push("Failed Image or Service Essentials item");
+  if (score.failReasons.critical) reasons.push("Failed critical item");
   if (score.failReasons.percentage) {
     reasons.push(`Score below ${Math.round(PASSING_PERCENTAGE * 100)}%`);
   }

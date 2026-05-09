@@ -1,9 +1,11 @@
 import {
   LayoutDashboard, MapPin, ClipboardCheck, AlertTriangle, FileText, Calendar,
-  Archive, Shield, LogOut, Users,
+  Archive, Shield, LogOut, Users, Settings,
 } from "lucide-react";
+import { getBranding } from "../../lib/branding.js";
 
 export default function Sidebar({ view, setView, activeInspection, userEmail, onSignOut }) {
+  const branding = getBranding();
   const nav = [
     { id: "dashboard",  label: "Dashboard",         icon: LayoutDashboard },
     { id: "sites",      label: "Sites",             icon: MapPin },
@@ -13,6 +15,7 @@ export default function Sidebar({ view, setView, activeInspection, userEmail, on
     { id: "corporate",  label: "Corporate Archive", icon: Archive },
     { id: "issues",     label: "Issues Tracker",    icon: AlertTriangle },
     { id: "inspectors", label: "Inspectors",        icon: Users },
+    { id: "templates",  label: "Templates",         icon: Settings },
   ];
 
   return (
@@ -23,8 +26,8 @@ export default function Sidebar({ view, setView, activeInspection, userEmail, on
             <Shield className="w-4 h-4 text-stone-900" strokeWidth={2.5} />
           </div>
           <div>
-            <div className="font-display font-semibold text-base leading-none">Vanguard</div>
-            <div className="text-[10px] text-stone-400 uppercase tracking-widest mt-1">Pre-Inspection</div>
+            <div className="font-display font-semibold text-base leading-none">{branding.appName}</div>
+            <div className="text-[10px] text-stone-400 uppercase tracking-widest mt-1">{branding.appEyebrow}</div>
           </div>
         </div>
       </div>
@@ -73,16 +76,18 @@ export default function Sidebar({ view, setView, activeInspection, userEmail, on
             </button>
           )}
         </div>
-        <div className="mt-3 flex items-center justify-center">
-          <div className="bg-white rounded-md px-3 py-1.5">
-            <img
-              src="/seven-star-logo.png"
-              alt="Seven Star Energy"
-              className="h-10 w-auto object-contain"
-              onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }}
-            />
+        {branding.parentLogoUrl && (
+          <div className="mt-3 flex items-center justify-center">
+            <div className="bg-white rounded-md px-3 py-1.5">
+              <img
+                src={branding.parentLogoUrl}
+                alt={branding.parentLogoAlt || branding.parentName}
+                className="h-10 w-auto object-contain"
+                onError={(e) => { e.currentTarget.parentElement.style.display = "none"; }}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </aside>
   );

@@ -272,6 +272,7 @@ legacy bucket during the cutover, since reads are public.
 | `/issues` | Issue tracker with activity timeline | members |
 | `/documents` | Generic doc vault (replaces SSE "Corporate Archive") | members |
 | `/inspectors` | Inspector roster | members |
+| `/templates` | Inspection template editor + JSON import | members |
 | `/settings` | Tenant admin (placeholder; surfaces tenant config summary) | members |
 
 The `(app)/layout.jsx` enforces the auth gate and provides
@@ -281,6 +282,62 @@ render the corresponding view from `useAppState()`.
 The sidebar / navigation order is currently hardcoded in `Sidebar.jsx`
 for SSE parity. Move it to read `tenant.navigation` (already shaped for
 this in the DB) when ready.
+
+---
+
+## Inspection templates (response types + editor + import)
+
+The inspection rubric is no longer a hardcoded const. Items support
+four response types — `pass_fail` (default, contributes to score),
+`number`, `text`, `select` (informational, do not affect score). Items
+without a `responseType` field are treated as `pass_fail` for back-compat.
+
+The runner switches widget per response type and **photos remain
+attachable on every type**. Reports + PDF render Pass/Fail/N/A pills
+for scored items and the literal value (truncated) for the others.
+
+**Template editor**: `/templates` page. Build sections + items, pick a
+response type per question with widget-specific config (points, units,
+options). **JSON import** replaces the draft. **Revert to default**
+restores the built-in 200-pt SSE rubric.
+
+**Stamping**: every inspection persists `inspection.template` at start
+time, so editing the active template doesn't retroactively change old
+reports — they keep the structure they were scored against.
+
+**Where it lives today**:
+- `src/components/templates/TemplateEditor.jsx` — full editor UI
+- `src/data/schema.js` — `RESPONSE_TYPES`, `getResponseType`, `isScored`,
+  `buildDefaultTemplate`, `resolveActiveTemplate`, `getInspectionTemplate`
+- `src/lib/scoring.js` — scoring tolerates non-pass-fail items
+- `useUserDataKey("template")` — current persistence layer (per-user JSON)
+
+**Migration to multi-tenant DB**: today the saved template is a JSON
+blob in `user_data.template`. In the Hypeify model, that should become
+a row in `public.inspection_templates` keyed by tenant_id. The
+TemplateEditor ultimately reads/writes through the tenant context, the
+default falls back to whatever's seeded for that tenant in
+`inspection_templates`, and Hypeify's data-migration script copies the
+single existing user_data.template row into the SSE tenant's
+inspection_templates table at cutover.
+
+---
+
+## White-label branding
+
+Single source of truth at `src/lib/branding.js`. The sidebar header,
+mobile nav, login screen, and PDF report (logo card + footer +
+filename) all read from it.
+
+**To onboard a new tenant** under the current SSE-only build: drop
+their logo into `/public/`, update the values in `branding.js`. Done.
+
+**Under Hypeify multi-tenant**: replace `getBranding()` with a function
+that reads `tenant.branding` from the tenant context. The shape of the
+return value already matches what `tenant_config.branding` stores
+(`appName`, `parentName`, `parentLogoUrl`, etc.). Logos for tenants
+ultimately live in the `tenant-files` storage bucket, and the value in
+`tenant.branding.parentLogoUrl` becomes a public CDN URL.
 
 ---
 

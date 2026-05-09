@@ -15,7 +15,7 @@ import {
   useDataContext,
   useUserDataKey,
 } from "../../hooks/useUserData.jsx";
-import { SCHEMA } from "../../data/schema.js";
+import { SCHEMA, resolveActiveTemplate, isScored } from "../../data/schema.js";
 import { computeScore } from "../scoring.js";
 import { deletePhoto } from "../photos.js";
 
@@ -24,8 +24,9 @@ import { deletePhoto } from "../photos.js";
 // =====================================================================
 // Single client-side provider that holds *everything* the app shell used
 // to manage in App.jsx: data hooks (sites, scheduled, issues, reports,
-// corporate, inspectors, activeInspection), UI state (modals, toasts,
-// confirm dialog, mobile more-sheet), and every CRUD handler.
+// corporate, inspectors, activeInspection, customTemplate), UI state
+// (modals, toasts, confirm dialog, mobile more-sheet), and every CRUD
+// handler.
 //
 // Pages and chrome components consume slices via useAppState(). This is
 // deliberately one big context — fine-grained context-splitting can come
@@ -34,7 +35,8 @@ import { deletePhoto } from "../photos.js";
 //
 // Hypeify Claude Code: tenant-aware data should land here. The provider
 // already takes a `user` prop; add a `tenant` prop and route reads/writes
-// through tenant-scoped tables.
+// through tenant-scoped tables. Templates should ultimately come from
+// `inspection_templates` rows, not from a per-user JSON blob.
 // =====================================================================
 
 const AppStateContext = createContext(null);
@@ -60,12 +62,13 @@ export function AppStateProvider({ user, children }) {
 
 function Inner({ user, children }) {
   const { data, error } = useDataContext();
-  const [sites, setSites]                   = useUserDataKey("sites");
-  const [scheduled, setScheduled]           = useUserDataKey("scheduled");
-  const [issues, setIssues]                 = useUserDataKey("issues");
-  const [completed, setCompleted]           = useUserDataKey("reports");
-  const [corporate, setCorporate]           = useUserDataKey("corporate");
-  const [inspectors, setInspectors]         = useUserDataKey("inspectors");
+  const [sites, setSites]                     = useUserDataKey("sites");
+  const [scheduled, setScheduled]             = useUserDataKey("scheduled");
+  const [issues, setIssues]                   = useUserDataKey("issues");
+  const [completed, setCompleted]             = useUserDataKey("reports");
+  const [corporate, setCorporate]             = useUserDataKey("corporate");
+  const [inspectors, setInspectors]           = useUserDataKey("inspectors");
+  const [customTemplate, setCustomTemplate]   = useUserDataKey("template");
   const [activeInspection, setActiveInspection] = useUserDataKey("active_inspection");
 
   const [issueDetail, setIssueDetail]               = useState(null);
@@ -167,6 +170,9 @@ function Inner({ user, children }) {
       window.location.assign("/inspection");
       return;
     }
+    // Stamp the active template onto every new inspection so future edits
+    // to the template don't retroactively change in-flight or saved reports.
+    const template = resolveActiveTemplate(customTemplate);
     if (activeInspection) {
       setConfirmDialog({
         title: "Discard in-progress walkthrough?",
@@ -179,6 +185,7 @@ function Inner({ user, children }) {
             siteId,
             site,
             scheduleId,
+            template,
             pumpPositions: Number(site.pumps) || 0,
             startedAt: new Date().toISOString(),
             answers: {},
@@ -195,6 +202,7 @@ function Inner({ user, children }) {
       siteId,
       site,
       scheduleId,
+      template,
       pumpPositions: Number(site.pumps) || 0,
       startedAt: new Date().toISOString(),
       answers: {},
@@ -219,10 +227,13 @@ function Inner({ user, children }) {
     if (!activeInspection) return;
     const answers = activeInspection.answers || {};
     const comments = activeInspection.comments || {};
-    const score = computeScore(answers);
-    const fails = SCHEMA.flatMap((sec) =>
+    // Score against the inspection's stamped template (or the default
+    // SCHEMA if this in-flight inspection predates template stamping).
+    const sections = activeInspection.template?.sections || SCHEMA;
+    const score = computeScore(answers, sections);
+    const fails = sections.flatMap((sec) =>
       sec.items
-        .filter((it) => answers[it.id] === "fail")
+        .filter((it) => isScored(it) && answers[it.id] === "fail")
         .map((it) => ({
           ...it,
           comment: comments[it.id] || "",
@@ -237,6 +248,7 @@ function Inner({ user, children }) {
       siteId: activeInspection.siteId,
       completedAt: new Date().toISOString(),
       inspector: inspectorName,
+      template: activeInspection.template,
       score: score.earned,
       total: score.total,
       effectiveTotal: score.effectiveTotal,
@@ -269,7 +281,7 @@ function Inner({ user, children }) {
 
     if (fails.length > 0) {
       const newIssues = fails.map((f) => {
-        const sec = SCHEMA.find((s) => s.items.some((i) => i.id === f.id));
+        const sec = sections.find((s) => s.items.some((i) => i.id === f.id));
         const baseTime = Date.now();
         const baseId = `${baseTime}-${f.id}`;
         const photosForItem = activeInspection.photos?.[f.id] || [];
@@ -491,6 +503,7 @@ function Inner({ user, children }) {
       corporate,
       inspectors,
       activeInspection,
+      customTemplate, setCustomTemplate,
       // ui state
       issueDetail, setIssueDetail,
       reportDetail, setReportDetail,
@@ -519,6 +532,7 @@ function Inner({ user, children }) {
     }),
     [
       user, sitesEnriched, sites, scheduled, issues, completed, corporate, inspectors, activeInspection,
+      customTemplate,
       issueDetail, reportDetail, corpDetail, siteDetailId, showSiteForm, editingSite,
       showCorpForm, showInspectorForm, editingInspector, showIssueForm, confirmDialog, moreOpen, toasts,
     ]

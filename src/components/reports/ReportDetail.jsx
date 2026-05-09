@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ShieldAlert, Download, Share2, Loader2, Trash2 } from "lucide-react";
-import { SCHEMA, PASSING_PERCENTAGE, getInspectionSchema } from "../../data/schema.js";
+import { SCHEMA, PASSING_PERCENTAGE, getInspectionSchema, isScored, getResponseType } from "../../data/schema.js";
 import PriorityPill from "../shared/PriorityPill.jsx";
 import PhotoLightbox from "../shared/PhotoLightbox.jsx";
 
@@ -22,8 +22,13 @@ function deriveSummary(report) {
   let naPoints = 0;
   let failedCriticalItems = 0;
   let failedZTItems = 0;
-  for (const sec of SCHEMA) {
+  // Old reports use the static SCHEMA; reports stamped with a custom
+  // template re-use those sections so the math matches the rubric the
+  // inspector saw at the time.
+  const sections = report.template?.sections || SCHEMA;
+  for (const sec of sections) {
     for (const it of sec.items) {
+      if (!isScored(it)) continue;
       totalConfigured += it.pts;
       const v = report.answers?.[it.id];
       if (v === "pass") earned += it.pts;
@@ -54,7 +59,8 @@ function deriveSummary(report) {
 
 export default function ReportDetail({ report, sites, onBack, onDelete }) {
   const site = sites.find((s) => s.id === report.siteId);
-  const ztFails = (report.fails || []).filter((f) => SCHEMA.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id)));
+  const reportSections = report.template?.sections || SCHEMA;
+  const ztFails = (report.fails || []).filter((f) => reportSections.find((s) => s.zeroTolerance && s.items.some((i) => i.id === f.id)));
   const summary = useMemo(() => deriveSummary(report), [report]);
   // Reports persist their pumpPositions so the per-position list stays
   // consistent even if the site's pump count is later edited.
@@ -277,13 +283,15 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
         <div className="space-y-4">
           {fullSchema.map((sec) => {
             // Skip documentation-only sections (e.g. per-pump checklist) from
-            // the score-bar overview — they don't contribute to /200.
+            // the score-bar overview — they don't contribute to /200. Also
+            // skip non-pass-fail items so number/text answers don't inflate
+            // the denominator.
             if (sec.documentation) return null;
-            const items = sec.items;
-            const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
-            const total = items.reduce((a, it) => a + it.pts, 0);
-            const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
-            const fails = items.filter((it) => report.answers?.[it.id] === "fail").length;
+            const scoredItems = sec.items.filter(isScored);
+            const earned = scoredItems.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
+            const total = scoredItems.reduce((a, it) => a + it.pts, 0);
+            const naPts = scoredItems.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
+            const fails = scoredItems.filter((it) => report.answers?.[it.id] === "fail").length;
             const effective = total - naPts;
             if (total === 0 && fails === 0) return null;
             return (
@@ -321,12 +329,13 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
           {fullSchema.map((sec) => {
             const items = sec.items;
             if (!items || items.length === 0) return null;
-            const earned = items.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
-            const total = items.reduce((a, it) => a + it.pts, 0);
-            const naPts = items.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
-            const failsInSec = items.filter((it) => report.answers?.[it.id] === "fail").length;
-            const naCount = items.filter((it) => report.answers?.[it.id] === "na").length;
-            const passCount = items.filter((it) => report.answers?.[it.id] === "pass").length;
+            const scoredItems = items.filter(isScored);
+            const earned = scoredItems.reduce((a, it) => a + (report.answers?.[it.id] === "pass" ? it.pts : 0), 0);
+            const total = scoredItems.reduce((a, it) => a + it.pts, 0);
+            const naPts = scoredItems.reduce((a, it) => a + (report.answers?.[it.id] === "na" ? it.pts : 0), 0);
+            const failsInSec = scoredItems.filter((it) => report.answers?.[it.id] === "fail").length;
+            const naCount = scoredItems.filter((it) => report.answers?.[it.id] === "na").length;
+            const passCount = scoredItems.filter((it) => report.answers?.[it.id] === "pass").length;
             const failsList = (report.fails || []).filter((f) => items.some((i) => i.id === f.id));
             return (
               <div key={sec.id} className="border-t border-stone-100 first:border-t-0">
@@ -380,6 +389,26 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
                     const note = report.comments?.[it.id];
                     const photos = report.photos?.[it.id] || [];
                     const failMatch = failsList.find((f) => f.id === it.id);
+                    const rt = getResponseType(it);
+                    const renderAnswerPill = () => {
+                      if (rt === "pass_fail") {
+                        if (ans === "pass") return <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">Pass</span>;
+                        if (ans === "fail") return <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-red-600 text-white rounded font-bold">Fail</span>;
+                        if (ans === "na")   return <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-stone-700 text-white rounded font-bold">N/A</span>;
+                        return <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-stone-100 text-stone-500 rounded">—</span>;
+                      }
+                      // number / text / select — render the value verbatim.
+                      const hasAns = ans != null && ans !== "";
+                      if (!hasAns) {
+                        return <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-stone-100 text-stone-500 rounded">—</span>;
+                      }
+                      const display = rt === "number" && it.unit ? `${ans} ${it.unit}` : String(ans);
+                      return (
+                        <span className="font-mono text-[11px] px-2 py-0.5 bg-stone-100 text-stone-800 rounded font-medium max-w-[180px] truncate" title={display}>
+                          {display}
+                        </span>
+                      );
+                    };
                     return (
                       <div key={it.id} className="px-4 md:px-6 py-3 md:py-3.5">
                         <div className="flex items-start gap-3">
@@ -391,26 +420,7 @@ export default function ReportDetail({ report, sites, onBack, onDelete }) {
                               <p className="flex-1 text-sm text-stone-800 leading-relaxed">{it.q}</p>
                               <div className="flex items-center gap-1.5 flex-shrink-0">
                                 {failMatch && <PriorityPill priority={failMatch.severity} />}
-                                {ans === "pass" && (
-                                  <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">
-                                    Pass
-                                  </span>
-                                )}
-                                {ans === "fail" && (
-                                  <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-red-600 text-white rounded font-bold">
-                                    Fail
-                                  </span>
-                                )}
-                                {ans === "na" && (
-                                  <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-stone-700 text-white rounded font-bold">
-                                    N/A
-                                  </span>
-                                )}
-                                {!ans && (
-                                  <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-stone-100 text-stone-500 rounded">
-                                    —
-                                  </span>
-                                )}
+                                {renderAnswerPill()}
                               </div>
                             </div>
                             {note && (
