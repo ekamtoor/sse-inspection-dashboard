@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Shield, Mail, Loader2 } from "lucide-react";
-import { supabase } from "../../lib/supabase.js";
+import { supabase } from "../../lib/supabase/client.js";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
